@@ -1,44 +1,7 @@
-import { statSync } from 'fs';
-import wabt from 'wabt';
 import { Stmt, Expr, countDefDeclStmts } from './ast';
 import { parseProgram, traverseExpr } from './parser';
 import { typeCheckProgram } from './typechecker';
 import { CompilerError } from './errors';
-
-export async function runPython(pythonSrouce: string): Promise<number> {
-  const wat = compile(pythonSrouce);
-  return run(wat)
-}
-
-export async function run(watSource: string): Promise<number> {
-  const wabtApi = await wabt();
-  const importObject = {
-    imports: {
-      // we typically define print to mean logging to the console. To make testing
-      // the compiler easier, we define print so it logs to a string object.
-      //  We can then examine output to see what would have been printed in the
-      //  console.
-      print: (arg : any) => {
-        importObject.output += arg;
-        importObject.output += "\n";
-        return arg;
-      },
-      pow: (x: number, y: number) => {
-        return Math.pow(x, y)
-      },
-    },
-
-    output: ""
-  };
-
-  // Next three lines are wat2wasm
-  const parsed = wabtApi.parseWat("example", watSource);
-  const binary = parsed.toBinary({});
-  const wasmModule = await WebAssembly.instantiate(binary.buffer, importObject as any);
-
-  // This next line is wasm-interp
-  return (wasmModule.instance.exports as any)._start();
-}
 
 // (window as any)["runWat"] = run;
 
@@ -65,7 +28,7 @@ export function nestedRets(stmt: Stmt): boolean {
   }
 }
 
-class watBuilder {
+export class watBuilder {
   defs: string[];
   decl: string[];
   body: string[];
@@ -100,6 +63,8 @@ class watBuilder {
   }
 
   addExpr(expr: Expr): watBuilder {
+    console.log("addExpr");
+    console.log(expr);
     switch(expr.tag) {
       case "id":
         return this.addInstr([`(local.get $${expr.name})`]);
@@ -137,7 +102,7 @@ class watBuilder {
             case "//": return "div_s";
             case "%": return "rem_s";
             case "==": return "eq";
-            case "!=": return "neq";
+            case "!=": return "ne";
             case "<=": return "le_s";
             case ">=": return "ge_s";
             case "<": return "lt_s";
@@ -151,26 +116,18 @@ class watBuilder {
       }
       case "parens": 
         return this.addExpr(expr.expr);
+      default:
+        throw new Error("Not implemented");
     }
   }
 
   addMaxInline(arg1: Expr, arg2: Expr): watBuilder {
-    console.log(this);
-    console.log(arg1);
-    console.log(this.addExpr(arg1));
-    console.log(this.addInstr(["(local.set $___TMP0)"]));
     const tmp = this.addExpr(arg1)
                     .addInstr(["(local.set $___TMP0)"])
                     .addExpr(arg2)
-                    .addInstr([
-                       "(local.set $___TMP1)",
-                       "(local.get $___TMP0)",
-                       "(local.get $___TMP1)",
-                       "(local.get $___TMP0)",
-                       "(local.get $___TMP1)",
-                       "(i32.gt_s)",
-                       "(select)"
-                     ]);
+                    .addInstr(["(local.set $___TMP1)", "(local.get $___TMP0)",
+                               "(local.get $___TMP1)", "(local.get $___TMP0)",
+                               "(local.get $___TMP1)", "(i32.gt_s)", "(select)"]);
     return tmp.addDecl(declTmpVar(tmp.stackSize, 2))
               .setStackSize(Math.max(2, tmp.stackSize));
   }
@@ -179,32 +136,57 @@ class watBuilder {
     const tmp = this.addExpr(arg1)
                     .addInstr(["(local.set $___TMP0)"])
                     .addExpr(arg2)
-                    .addInstr([
-                       "(local.set $___TMP1)",
-                       "(local.get $___TMP0)",
-                       "(local.get $___TMP1)",
-                       "(local.get $___TMP0)",
-                       "(local.get $___TMP1)",
-                       "(i32.lt_s)",
-                       "(select)"
-                     ]);
+                    .addInstr(["(local.set $___TMP1)", "(local.get $___TMP0)",
+                               "(local.get $___TMP1)", "(local.get $___TMP0)",
+                               "(local.get $___TMP1)", "(i32.lt_s)", "(select)"]);
     return tmp.addDecl(declTmpVar(tmp.stackSize, 2))
               .setStackSize(Math.max(2, tmp.stackSize));
   }
 
   addAbsInline(arg: Expr): watBuilder {
     const tmp = this.addExpr(arg)
-                    .addInstr(["(local.set $___TMP0)",
-                               "(local.get $___TMP0)",
-                               "(local.get $___TMP0)",
-                               "(i32.const -1)",
-                               "(i32.mul)",
-                               "(local.get $___TMP0)",
-                               "(i32.const 0)",
-                               "(i32.gt_s)",
-                               "(select)"]);
+                    .addInstr(["(local.set $___TMP0)", "(local.get $___TMP0)",
+                               "(local.get $___TMP0)", "(i32.const -1)",
+                               "(i32.mul)", "(local.get $___TMP0)",
+                               "(i32.const 0)", "(i32.gt_s)", "(select)"]);
     return tmp.addDecl(declTmpVar(tmp.stackSize, 1))
               .setStackSize(Math.max(1, tmp.stackSize));
+  }
+
+  addPowInline(arg1: Expr, arg2: Expr): watBuilder {
+    const tmp = this.addExpr(arg1)
+                    .addInstr(["(local.set $___TMP0)"])
+                    .addExpr(arg2)
+                    .addInstr(["(local.set $___TMP1)", "(i32.const 1)",
+                               "(local.set $___TMP2)", "(i32.const 0)",
+                               "(local.set $___TMP3)", "(i32.const 1)",
+                               "(local.set $___TMP4)", "(local.get $___TMP4)",
+                               "(if", "(then", "(loop", "(local.get $___TMP1)",
+                               "(i32.const 0)", "(i32.eq)", "(if", "(then",
+                               "(local.get $___TMP2)", "(local.set $___TMP3)",
+                               "(i32.const 0)", "(local.set $___TMP4))",
+                               "(else", "(local.get $___TMP1)", "(i32.const 1)",
+                               "(i32.eq)", "(if", "(then", "(local.get $___TMP0)",
+                               "(local.get $___TMP2)", "(i32.mul)",
+                               "(local.set $___TMP3)", "(i32.const 0)",
+                               "(local.set $___TMP4))", "(else",
+                               "(local.get $___TMP1)", "(i32.const 2)",
+                               "(i32.rem_s)", "(i32.const 0)", "(i32.eq)",
+                               "(if", "(then", "(local.get $___TMP0)",
+                               "(local.get $___TMP0)", "(i32.mul)",
+                               "(local.set $___TMP0)", "(local.get $___TMP1)",
+                               "(i32.const 2)", "(i32.div_s)", "(local.set $___TMP1))",
+                               "(else", "(local.get $___TMP0)", "(local.get $___TMP2)",
+                               "(i32.mul)", "(local.set $___TMP2)",
+                               "(local.get $___TMP0)", "(local.get $___TMP0)",
+                               "(i32.mul)", "(local.set $___TMP0)",
+                               "(local.get $___TMP1)", "(i32.const 1)",
+                               "(i32.sub)", "(i32.const 2)", "(i32.div_s)",
+                               "(local.set $___TMP1)))))))",
+                               "(local.get $___TMP4)", "(i32.const 1)", "(i32.xor)",
+                               "(br_if 1)", "(br 0))))", "(local.get $___TMP3)"]);
+    return tmp.addDecl(declTmpVar(tmp.stackSize, 5))
+              .setStackSize(Math.max(5, tmp.stackSize));
   }
 
   addCall(expr: Expr): watBuilder {
@@ -215,15 +197,18 @@ class watBuilder {
     switch (expr.name) {
       case "max": return this.addMaxInline(expr.arguments[0], expr.arguments[1]);
       case "min": return this.addMinInline(expr.arguments[0], expr.arguments[1]);
+      case "pow": return this.addPowInline(expr.arguments[0], expr.arguments[1]);
       case "abs": return this.addAbsInline(expr.arguments[0]);
       default: 
+        console.log("addCall");
+        console.log(expr);
+        console.log(expr.arguments);
         return expr.arguments.reduce((acc, e) => acc.addExpr(e), this)
                              .addInstr([`(call $${expr.name})`]);
     }
   }
 
-  // FIXME: add support for nested functions
-  addFunc(stmt: Stmt): watBuilder {
+  addDef(stmt: Stmt): watBuilder {
     if (stmt.tag != "define") {
       throw new Error("Compiler error. Check code.");
     }
@@ -239,6 +224,13 @@ class watBuilder {
         if (s.tag != "assign") { throw new Error("Compiler error. Check code.") }
         return acc.addStmt(s)
                   .addDecl([`(local $${s.name} i32)`]);
+      }, new watBuilder);
+
+    const nestedDefs = defStmts
+      .filter(s => s.tag == "define")
+      .reduce((acc, s) => {
+        if (s.tag != "define") { throw new Error("Compiler error. Check code.") }
+        return acc.addStmt(s);
       }, new watBuilder);
 
     // distances between early return statements
@@ -290,7 +282,8 @@ class watBuilder {
       .concat(hasRet(rest) ?  [" (result i32)"] : [])
       .join(" ");
 
-    this.defs = ([`(func $${stmt.name} ${inputOutput}`]).concat(iout2.toCode());
+    this.defs = ([`(func $${stmt.name} ${inputOutput}`])
+      .concat(iout2.toCode(), nestedDefs.toCode());
     return this
   }
 
@@ -308,7 +301,7 @@ class watBuilder {
   addStmt(stmt: Stmt): watBuilder {
     switch(stmt.tag) {
       case "define": 
-        return this.addFunc(stmt);
+        return this.addDef(stmt);
       case "return": 
         // TODO: see if you can optimize away the last two instructions when there
         // is no branching
@@ -356,7 +349,10 @@ class watBuilder {
   }
 }
 
-// so us mere humans can understand the output
+// TODO: expand to a full-on reformating function so we can get rid of the
+// mutable append parentheses statements and just use concat in the normal code.
+// We will instead append the free parentheses to previous lines in this
+// function.
 function indent(code: string[]): string[] {
   const indented: [number, string[]] =
     code.reduce((acc: [number, string[]], s: string) => {
@@ -384,6 +380,7 @@ export function compile(source: string): string {
   const defStmts = ast.slice(0, n);
   const rest = ast.slice(n);
 
+  // turn the ast into wat code (wrapped in watBuilder)
   const iout = defStmts
     .filter(s => s.tag == "assign")
     .reduce((acc, s) => {
@@ -394,7 +391,7 @@ export function compile(source: string): string {
     .addStmts(defStmts.filter(s => s.tag == "define"))
     .addStmts(rest);
 
-  let progBody = iout.decl.concat(iout.body);
+  let progBody = iout.toCode();
   if (!iout.printLast) {
     progBody[progBody.length - 1] += "))";
   }
@@ -402,7 +399,6 @@ export function compile(source: string): string {
 
   const code = ["(module"].concat(
     [`(func $print (import "imports" "print") (param i32) (result i32))`],
-    [`(func $pow (import "imports" "pow") (param i32) (param i32) (result i32))`],
     iout.defs,
     [`(func (export "_start") ${out}`],
     ["(local $___IMPL_RET i32)"],

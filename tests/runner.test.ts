@@ -1,4 +1,5 @@
-import { runPython, compile } from '../compiler';
+import { compile } from '../compiler';
+import { runPython } from '../runner';
 import { expect } from 'chai';
 import 'mocha';
 
@@ -12,9 +13,6 @@ const importObject = {
       importObject.output += arg;
       importObject.output += "\n";
       return arg;
-    },
-    pow: (x: number, y: number) => {
-      return Math.pow(x, y)
     },
   },
 
