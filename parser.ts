@@ -94,7 +94,8 @@ export function traverseStmt(s: string, t: TreeCursor): Stmt {
           t.parent();
           return body
         } else {
-          throw new Error("Compiler error. Check code.");
+          // no else
+          return [];
         }
       };
 
@@ -249,6 +250,14 @@ export function traverseExpr(s: string, t: TreeCursor): Expr {
       const arg2 = traverseExpr(s, t);
       t.parent();
       return { tag: "binop", arg1, arg2, binop };
+    }
+    case "ParenthesizedExpression": {
+      t.firstChild(); // focuses on "("
+      t.nextSibling();
+      const e = traverseExpr(s, t);
+      console.log(e);
+      t.parent();
+      return { tag: "parens", expr: e }
     }
   }
 }

@@ -3,6 +3,18 @@ import {compile, run} from './compiler';
 document.addEventListener("DOMContentLoaded", async () => {
   const runButton = document.getElementById("run");
   const userCode = document.getElementById("user-code") as HTMLTextAreaElement;
+  const importObject = {
+    imports: {
+      print: (arg : any) => {
+        console.log("Logging from WASM: ", arg);
+        const elt = document.createElement("pre");
+        document.getElementById("output").appendChild(elt);
+        elt.innerText = arg;
+        return arg;
+      },
+    },
+    output: ""
+  };
   runButton.addEventListener("click", async () => {
     const program = userCode.value;
     const wat = compile(program);

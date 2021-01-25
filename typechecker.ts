@@ -22,7 +22,7 @@ export function typeCheckProgram(prog: Stmt[]) {
   builtin.set("max", { parameterTypes: ["int", "int"], outputType: "int" });
   builtin.set("min", { parameterTypes: ["int", "int"], outputType: "int" });
   builtin.set("pow", { parameterTypes: ["int", "int"], outputType: "int" });
-  typeCheck(prog, new Map, new Map, "none")
+  typeCheck(prog, new Map, builtin, "none")
 }
 
 type FuncType = { parameterTypes: Type[], outputType: Type }
@@ -30,10 +30,10 @@ type FuncType = { parameterTypes: Type[], outputType: Type }
 // A failure in the typechecking process leads to an unrecoverable failure so we
 // might as well throw an error and exit. A pass at this stage however does not
 // warrant any action.
-function typeCheck(stmts: Stmt[],
-                   outerVarScope: Map<string, Type>,
-                   outerFuncScope: Map<string, FuncType>,
-                   retType: Type) {
+export function typeCheck(stmts: Stmt[],
+                          outerVarScope: Map<string, Type>,
+                          outerFuncScope: Map<string, FuncType>,
+                          retType: Type) {
   // All the function definitions and variable declarations must be at the top
   // of the scope. The order of defs or decls doesn't matter--they can even be
   // interweaved, as long as no computation happens before then end of this
@@ -142,11 +142,11 @@ function typeCheck(stmts: Stmt[],
   };
 }
 
-function checkReturnType(name: string,
-                         stmts: Stmt[],
-                         varScope: Map<string, Type>,
-                         funcScope: Map<string, FuncType>,
-                         retType: Type) {
+export function checkReturnType(name: string,
+                                stmts: Stmt[],
+                                varScope: Map<string, Type>,
+                                funcScope: Map<string, FuncType>,
+                                retType: Type) {
   const checkLastStmtRetType = () => {
     // stmts.length == 0 should be caught be a ParseError
     const lastStmt = stmts[stmts.length - 1];
@@ -198,9 +198,9 @@ function checkExprType(expr: Expr,
   inferExprType(expr, varScope, funcScope);
 }
 
-function inferExprType(expr: Expr,
-                       varScope: Map<string, Type>,
-                       funcScope: Map<string, FuncType>): Type {
+export function inferExprType(expr: Expr,
+                              varScope: Map<string, Type>,
+                              funcScope: Map<string, FuncType>): Type {
   switch (expr.tag) {
     case "literal": {
       const literal = expr.value;
@@ -269,5 +269,7 @@ function inferExprType(expr: Expr,
         }
       }
     }
+    case "parens": 
+      return inferExprType(expr.expr, varScope, funcScope);
   }
 }

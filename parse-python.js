@@ -1,6 +1,6 @@
 const python = require('lezer-python');
 
-const input = "def foo(a: int, b: int) -> int:\n\nfoo(1, 2)";
+const input = "(x - 1 + 2)";
 
 const tree = python.parser.parse(input);
 
@@ -17,10 +17,9 @@ function printNode(t) {
   console.log(`${name}: "${substr}"`);
 }
 
-cursor.firstChild(); // FunctionDefinition
-cursor.firstChild(); // FunctionDefinition
-cursor.nextSibling(); // FunctionDefinition
-cursor.nextSibling(); // FunctionDefinition
-cursor.nextSibling(); // FunctionDefinition
-cursor.nextSibling(); // FunctionDefinition
+cursor.firstChild(); // ExpressionStatement
+cursor.firstChild(); // ParenthesizedExpression
+cursor.firstChild(); // "("
+cursor.nextSibling(); // BinaryExpression
+// cursor.nextSibling(); // ")"
 printNode(cursor)

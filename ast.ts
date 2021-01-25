@@ -15,8 +15,9 @@ export type Expr =
   | { tag: "call", name: string, arguments: Expr[] }
   | { tag: "uniop", uniop: UniOp, arg: Expr }
   | { tag: "binop", binop: BinOp, arg1: Expr, arg2: Expr }
+  | { tag: "parens", expr: Expr }
 
-export type Type = "" | "none" | "bool" | "int"
+export type Type = "" | "none" | "bool" | "int" | "poly"
 
 export type Literal =
     { tag: "none", }
