@@ -15,8 +15,6 @@ import {
   UniaryOpTypeError,
 } from './errors';
 
-// FIXME: the rhs of variable declaration can only be literals
-
 export const builtin = new Map;
 builtin.set("print", { parameterTypes: ["polymorphic"], outputType: "none" });
 builtin.set("abs", { parameterTypes: ["int"], outputType: "int" });
@@ -273,10 +271,12 @@ export function inferExprType(expr: Expr,
     case "call": {
       if (funcScope.has(expr.name)) {
         const ftype = funcScope.get(expr.name);
-        // check parameter types
+        // check that the function arity matches the number of parameters
+        // supplied
         if (ftype.parameterTypes.length != expr.arguments.length) {
           throw new ArityError(ftype.parameterTypes.length, expr.arguments.length);
         }
+        // check parameter types
         const zipped: [number, Type, Expr][] =
           ftype.parameterTypes.map((k, i) => [i, k, expr.arguments[i]]);
         for (const tuple of zipped) {

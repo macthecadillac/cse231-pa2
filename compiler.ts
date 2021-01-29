@@ -38,8 +38,17 @@ export function nestedRets(stmt: Stmt): boolean {
 // We will instead append the free parentheses to previous lines in this
 // function.
 function format(code: string[]): string[] {
+  const noOrphanedParens: string[] =
+    code.reduce((acc: string[], s: string) => {
+      if (s == ")") {
+        acc[acc.length - 1] += s;
+      } else {
+        acc.push(s);
+      }
+      return acc
+    }, []);
   const indented: [number, string[]] =
-    code.reduce((acc: [number, string[]], s: string) => {
+    noOrphanedParens.reduce((acc: [number, string[]], s: string) => {
       let cnt = 0;
       for (const c of s) {
         if (c == "(") {
@@ -98,6 +107,10 @@ export class watBuilder {
   addInstr(instr: string[]): watBuilder {
     this.body = this.body.concat(instr);
     return this
+  }
+
+  addClosingParen(): watBuilder {
+    return this.addInstr([")"]);
   }
 
   addDecl(decl: string[]): watBuilder {
@@ -334,8 +347,8 @@ export class watBuilder {
                                      "(i32.const 0)",
                                      "(local.set $___EARLY_RET)"] : [])
             .addStmts((ds.length > 0) ? earlyRet(rest, ds) : rest)
-            .addInstr(hasRet(rest) ? ["(local.get $___RET_VAL)"] : []);
-    iout2.body[iout2.body.length - 1] += ")";
+            .addInstr(hasRet(rest) ? ["(local.get $___RET_VAL)"] : [])
+            .addClosingParen();
 
     // if any statement contains return statements
     const inputOutput = stmt.parameters
@@ -416,17 +429,16 @@ export class watBuilder {
       case "if": {
         const tmp = this.addExpr(stmt.pred)
                         .addInstr(["(if", "(then"])  // typechecker disallows empty body1
-                        .addStmts(stmt.body1);
-        tmp.body[tmp.body.length - 1] = tmp.body[tmp.body.length - 1] + ")";
+                        .addStmts(stmt.body1)
+                        .addClosingParen();
 
         if (stmt.body2.length > 0) {
-          const tmp_ = tmp.addInstr(["(else"])
-                          .addStmts(stmt.body2);
-          tmp_.body[tmp_.body.length - 1] = tmp_.body[tmp_.body.length - 1] + "))";
-          return tmp_
+          return tmp.addInstr(["(else"])
+                    .addStmts(stmt.body2)
+                    .addClosingParen()
+                    .addClosingParen();
         } else {
-          tmp.body[tmp.body.length - 1] = tmp.body[tmp.body.length - 1] + ")";
-          return tmp
+          return tmp.addClosingParen();
         }
       }
       case "while": {
@@ -438,14 +450,15 @@ export class watBuilder {
                    .addExpr(stmt.pred)
                    .addInstr(["(i32.const 1)", "(i32.xor)", "(br_if 1)", "(br 0))))"]);
       }
-      case "pass": return this.addInstr([""])
+      case "pass": return this
     }
   }
 
   toWat(): string {
     let progBody = this.decl.concat(this.body);
     if (!this.implReturn) {
-      progBody[progBody.length - 1] += "))";
+      progBody.push(")");
+      progBody.push(")");
     }
     const out = (this.implReturn) ? "(result i32)" : "";
 
@@ -461,6 +474,7 @@ export class watBuilder {
       (this.implReturn) ? ["(local.get $___IMPL_RET)))"] : [""]
     );
 
+    console.log(code);
     return format(code).join("\n");
   }
 }
