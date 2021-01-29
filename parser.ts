@@ -15,10 +15,12 @@ export function parseFollowingStmts(s: string, t: TreeCursor): Array<Stmt> {
   const stmts = [];
   do {
     const stmt = traverseStmt(s, t);
-    stmts.push(stmt);
-    // drop all statements after pass or early return
-    if (stmt.tag == "pass" || stmt.tag == "return") {
-      break
+    if (stmt !== undefined) {
+      stmts.push(stmt);
+      // drop all statements after pass or early return
+      if (stmt.tag == "pass" || stmt.tag == "return") {
+        break
+      }
     }
   } while(t.nextSibling()); // t.nextSibling() returns false when it reaches
                             //  the end of the list of children
@@ -57,6 +59,37 @@ export function traverseStmt(s: string, t: TreeCursor): Stmt {
 
       const value = traverseExpr(s, t);
       t.parent();
+
+      // Chocopy doesn't allow a non-literal on the rhs of variable declaration
+      // and treats them as parse errors.
+      if (type_ != "" && value.tag != "literal") {
+        switch (value.tag) {
+          case "id": throw new ParseError(`IDENTIFIER: ${value.name}`);
+          case "call": throw new ParseError(`IDENTIFIER: ${value.name}`);
+          case "binop":
+            switch (value.binop) {
+              case "+": throw new ParseError("PLUS: +");
+              case "-": throw new ParseError("MINUS: -");
+              case "*": throw new ParseError("TIMES: *");
+              case "//": throw new ParseError("IDIV: //");
+              case "%": throw new ParseError("MOD: %");
+              case "==": throw new ParseError("EQEQ: ==");
+              case "!=": throw new ParseError("NEQ: !=");
+              case "<": throw new ParseError("LT: <");
+              case ">": throw new ParseError("GT: >");
+              case "<=": throw new ParseError("LEQ: <=");
+              case ">=": throw new ParseError("GEQ: >=");
+              case "is": throw new ParseError("IS: is");
+            }
+          case "uniop":
+            switch (value.uniop) {
+              case "neg": throw new ParseError("MINUS: -");
+              case "not": throw new ParseError("NOT: not");
+            }
+          case "parens": throw new ParseError("LPAREN: (");
+        }
+      }
+
       return { tag: "assign", name, type_, value };
     }
     case "ExpressionStatement": {
@@ -73,6 +106,9 @@ export function traverseStmt(s: string, t: TreeCursor): Stmt {
         if ((["if", "elif"]).includes(t.node.type.name)) {
           t.nextSibling(); // the predicate
           const pred = traverseExpr(s, t);
+          if (pred === undefined) {
+            throw new ParseError("COLON: :")
+          }
 
           t.nextSibling(); // the body
           t.firstChild();  // : before the body
@@ -98,7 +134,6 @@ export function traverseStmt(s: string, t: TreeCursor): Stmt {
           return [];
         }
       };
-
       const ifstmt = traverseIfs(s, t);
       t.parent();
       return ifstmt[0];
@@ -107,10 +142,16 @@ export function traverseStmt(s: string, t: TreeCursor): Stmt {
       t.firstChild();  // while
       t.nextSibling(); // predicate
       const pred = traverseExpr(s, t);
+      if (pred === undefined) {
+        throw new ParseError("COLON: :")
+      }
       t.nextSibling(); // Body
       t.firstChild();  // colon
       t.nextSibling(); // statement
       const body = parseFollowingStmts(s, t);
+      if (body.length == 0) {
+        throw new ParseError("DEDENT");
+      }
       t.parent();
       t.parent();
       return { tag: "while", pred, body }
@@ -143,7 +184,7 @@ export function traverseStmt(s: string, t: TreeCursor): Stmt {
       const body = parseFollowingStmts(s, t);
       // nested defs don't count
       if (body.filter(s => s.tag != "define").length == 0) {
-        throw new ParseError("EOF")
+        throw new ParseError("DEDENT")
       };
       t.parent();      // Pop to Body
       t.parent();      // Pop to FunctionDefinition
@@ -259,7 +300,6 @@ export function traverseExpr(s: string, t: TreeCursor): Expr {
       t.firstChild(); // focuses on "("
       t.nextSibling();
       const e = traverseExpr(s, t);
-      console.log(e);
       t.parent();
       return { tag: "parens", expr: e, type_: "" }
     }

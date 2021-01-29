@@ -2,6 +2,7 @@ import { TreeCursor } from 'lezer';
 import { varType, Stmt, Expr, Literal, UniOp, BinOp, Type,
          FuncType, countDefDeclStmts } from './ast';
 import {
+  ArityError,
   BinaryOpTypeError,
   ConditionalExprTypeError,
   DuplicateDeclaration,
@@ -23,13 +24,21 @@ builtin.set("max", { parameterTypes: ["int", "int"], outputType: "int" });
 builtin.set("min", { parameterTypes: ["int", "int"], outputType: "int" });
 builtin.set("pow", { parameterTypes: ["int", "int"], outputType: "int" });
 
+export function typeCheckStmt(stmt: Stmt,
+                              varScope: Map<string, Type>,
+                              funcScope: Map<string, FuncType>,
+                              retType: Type) {
+  buildTypedAST([stmt], varScope, funcScope, retType);
+}
+
 // A failure in the typechecking process leads to an unrecoverable failure so we
 // might as well throw an error and exit. A pass at this stage however does not
 // warrant any action.
 export function buildTypedAST(stmts: Stmt[],
                               outerVarScope: Map<string, Type> = new Map,
                               outerFuncScope: Map<string, FuncType> = builtin,
-                              retType: Type = "none"): Stmt[] {
+                              retType: Type = "none",
+                              strictMode: boolean = false): Stmt[] {
   // All the function definitions and variable declarations must be at the top
   // of the scope. The order of defs or decls doesn't matter--they can even be
   // interweaved, as long as no computation happens before then end of this
@@ -51,6 +60,11 @@ export function buildTypedAST(stmts: Stmt[],
     if (idents.has(stmt.name)) {
       throw new DuplicateDeclaration(stmt.name)
     };
+    if (strictMode) {
+      if (outerVarScope.has(stmt.name) || outerFuncScope.has(stmt.name)) {
+        throw new DuplicateDeclaration(stmt.name)
+      }
+    }
     idents.set(stmt.name, stmt);
   }
 
@@ -69,7 +83,7 @@ export function buildTypedAST(stmts: Stmt[],
     .reduce((map: Map<string, Type>, t: varType) => {
       map.set(t.name, t.type_);
       return map
-    }, outerVarScope);
+    }, new Map(outerVarScope));
 
   // Keep a table of all currently defined functions. Overwrite definitions from
   // the outer scope if necessary
@@ -81,7 +95,7 @@ export function buildTypedAST(stmts: Stmt[],
       };
       map.set(t.name, ftype);
       return map
-    }, outerFuncScope);
+    }, new Map(outerFuncScope));
 
   // Typecheck each statement
   const addTypes = (stmt: Stmt) => {
@@ -172,7 +186,7 @@ export function checkReturnType(name: string,
     if (lastStmt.tag == "return") {
       const t = inferExprType(lastStmt.value, varScope, funcScope);
       if (retType != t) {
-        throw new GeneralTypeError(t, retType);
+        throw new GeneralTypeError(retType, t);
       }
     } else {  // no return since "return" is always the last statement
       if (retType != "none") {
@@ -249,11 +263,20 @@ export function inferExprType(expr: Expr,
       const literal = expr.value;
       return (literal.tag == "number") ? "int" : literal.tag as Type;
     }
-    case "id": return varScope.get(expr.name);
+    case "id": {
+      if (varScope.has(expr.name)) {
+        return varScope.get(expr.name);
+      } else {
+        throw new NotAVariable(expr.name);
+      }
+    }
     case "call": {
       if (funcScope.has(expr.name)) {
         const ftype = funcScope.get(expr.name);
         // check parameter types
+        if (ftype.parameterTypes.length != expr.arguments.length) {
+          throw new ArityError(ftype.parameterTypes.length, expr.arguments.length);
+        }
         const zipped: [number, Type, Expr][] =
           ftype.parameterTypes.map((k, i) => [i, k, expr.arguments[i]]);
         for (const tuple of zipped) {

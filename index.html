@@ -12,12 +12,6 @@
             margin: 0;
             padding: 0;
         }
-        .user-code {
-            width: 100%;
-            height: 30em;
-            overflow: scroll;
-            font-family: monospace;
-        }
         .interactions {
             float: right;
             width: 49%;
@@ -25,37 +19,62 @@
             padding: 0;
             height: 100%;
         }
+        .user-code {
+            width: 100%;
+            height: 20em;
+            overflow: auto;
+            font-family: monospace;
+        }
         .repl-code {
-            height: 2em;
             width: 30em;
             text-align: left;
             font-family: monospace;
+            resize: none;
+            overflow: hidden;
+            background-color: #f8f8f8;
+            border-radius: 3px;
+            border-style: solid;
+            border-width: 1px;
+            border-color: #eeeeee;
         }
-        .prompt {
-            vertical-align: middle;
+        .old-code {
+            width: 30em;
+            text-align: left;
+            font-family: monospace;
+            resize: none;
+            overflow: hidden;
+            background-color: #f8f8f8;
+            border-radius: 3px;
+            border-style: solid;
+            border-width: 1px;
+            border-color: #cccccc;
+            padding: 7px;
         }
-        .output pre {
+        .repl-output pre {
             max-width: 100%;
             white-space: break-spaces;
             line-break: anywhere;
+        }
+        .spacer {
+            height: 6px;
         }
     </style>
 </head>
 
 <body>
     <div class="editor">
-    <textarea class="user-code" id="user-code"></textarea>
-    <button id="run">Run</button><br/>
-    <pre style="width:30%" id="generated-code"></pre>
-    <pre style="width:30%" id="output"></pre>
+        <textarea class="user-code" id="user-code"></textarea>
+        <button id="run">run</button><br/>
+        <pre style="width:30%" id="generated-code"></pre>
+        <pre style="width:30%" id="script-output"></pre>
     </div>
 
     <div class="interactions">
-        <div class="output" id="output">
+        <pre style="width:30%" id="repl-output"></pre>
+        <div class="output" id="repl-output">
         </div>
         <div id="repl-entry">
-            <span class="prompt"><code>»</code></span>
-            <input type="text" id="next-code" class="repl-code"></textarea>
+            <textarea type="text" id="next-code" rows="1" class="repl-code"></textarea>
         </div>
     </div>
 </body>

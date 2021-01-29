@@ -124,7 +124,7 @@ export class GeneralTypeError extends CompilerError {
   __proto__: CompilerError;
   actualType: Type;
   expectedType: Type;
-  constructor(actualType: Type, expectedType: Type) {
+  constructor(expectedType: Type, actualType: Type) {
     super(`Expected type \`${expectedType}\`; got type \`${actualType}\``);
     if (CompilerError.captureStackTrace) {
       CompilerError.captureStackTrace(this, NotDeclaredInScope)
@@ -143,7 +143,7 @@ export class FuncCallTypError extends CompilerError {
   expectedType: Type;
   paramN: number;
   constructor(actualType: Type, expectedType: Type, paramN: number) {
-    super(`Expected type \`${expectedType}\`; got type \`${actualType}\``);
+    super(`Expected type \`${expectedType}\`; got type \`${actualType}\` in parameter ${paramN}`);
     if (CompilerError.captureStackTrace) {
       CompilerError.captureStackTrace(this, FuncCallTypError)
     }
@@ -152,6 +152,23 @@ export class FuncCallTypError extends CompilerError {
     this.actualType = actualType;
     this.expectedType = expectedType;
     this.paramN = paramN;
+    this.__proto__ = new.target.prototype;
+  }
+}
+
+export class ArityError extends CompilerError {
+  __proto__: CompilerError;
+  expectedArity: number;
+  actualArity: number;
+  constructor(expectedArity: number, actualArity: number) {
+    super(`Expected ${expectedArity} arguments; got ${actualArity}`);
+    if (CompilerError.captureStackTrace) {
+      CompilerError.captureStackTrace(this, NotDeclaredInScope)
+    }
+
+    this.name = 'ArityError'
+    this.expectedArity = expectedArity;
+    this.actualArity = actualArity;
     this.__proto__ = new.target.prototype;
   }
 }

@@ -1,4 +1,4 @@
-import { Stmt, Expr, countDefDeclStmts } from './ast';
+import { Stmt, Expr, countDefDeclStmts, Type } from './ast';
 import { parseProgram, traverseExpr } from './parser';
 import { buildTypedAST } from './type';
 import { CompilerError } from './errors';
@@ -61,13 +61,22 @@ export class watBuilder {
   body: string[];
   stackSize: number;
   implReturn: boolean;
+  topLevel: boolean;
+  replMode: boolean;
+  replGlobalVarMap: Map<string, number>;
+  nextPtr: number;
 
-  constructor(ast: Stmt[] = []) {
+  constructor(ast: Stmt[] = [],
+              replMode: boolean = false) {
     this.defs = [];
     this.decl = [];
     this.body = [];
     this.stackSize = 0;
     this.implReturn = false;
+    this.replMode = replMode;
+    this.replGlobalVarMap = new Map;
+    this.topLevel = false;
+    this.nextPtr = 0;
 
     if (ast.length != 0) {
       // number of define statements
@@ -104,7 +113,12 @@ export class watBuilder {
   addExpr(expr: Expr): watBuilder {
     switch(expr.tag) {
       case "id":
-        return this.addInstr([`(local.get $${expr.name})`]);
+        if (this.replMode && this.topLevel) {
+          const ptr = this.replGlobalVarMap.get(expr.name);
+          return this.addInstr([`(i32.const ${ptr})`, "(i32.load)"]);
+        } else {
+          return this.addInstr([`(local.get $${expr.name})`]);
+        }
       case "literal": {
         const literal = expr.value;
         switch (literal.tag) {
@@ -341,8 +355,18 @@ export class watBuilder {
     } else {
       const lastStmt = stmts[stmts.length - 1];
       if (lastStmt.tag == "expr") {
-        if (lastStmt.expr.type_ != "none") {
+        if (lastStmt.expr.type_ != "none" && !this.replMode) {
           this.implReturn = true;
+        } else if (lastStmt.expr.type_ != "none" && this.replMode) {
+          // print last expressiong if in repl mode
+          return stmts.slice(0, stmts.length - 1)
+                      .reduce((acc, s) => acc.addStmt(s), this)
+                      .addCall({
+                        tag: "call",
+                        name: "print",
+                        arguments: [lastStmt.expr],
+                        type_: "none"
+                      });
         }
       }
       return stmts.reduce((acc, s) => acc.addStmt(s), this);
@@ -361,8 +385,23 @@ export class watBuilder {
                               "(i32.const 1)",
                               "(local.set $___EARLY_RET)"]);
       case "assign": {
-        return this.addExpr(stmt.value)
-                   .addInstr([`(local.set $${stmt.name})`]);
+        if (this.replMode && this.topLevel) {
+          let ptr;
+          if (this.replGlobalVarMap.has(stmt.name)) {
+            ptr = this.replGlobalVarMap.get(stmt.name);
+          } else {
+            ptr = this.nextPtr;
+            this.nextPtr += 4;
+            this.replGlobalVarMap.set(stmt.name, ptr);
+            this.addInstr([`(i32.const ${ptr})`, `(local.set $${stmt.name})`]);
+          }
+          return this.addInstr([`(i32.const ${ptr})`])
+                     .addExpr(stmt.value)
+                     .addInstr(["(i32.store)"]);
+        } else {
+          return this.addExpr(stmt.value)
+                     .addInstr([`(local.set $${stmt.name})`]);
+        }
       }
       case "expr":
         // the typechecker should prevent this EXCEPT for a lone expression at the
@@ -414,6 +453,7 @@ export class watBuilder {
       [`(func $printI32 (import "imports" "printI32") (param i32))`],
       [`(func $printBool (import "imports" "printBool") (param i32))`],
       [`(func $printNone (import "imports" "printNone"))`],
+      (this.replMode) ? [`(import "env" "heap" (memory 1))`] : [],
       this.defs,
       [`(func (export "_start") ${out}`],
       ["(local $___IMPL_RET i32)"],

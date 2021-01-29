@@ -30,20 +30,21 @@ export const importObject = {
     },
   },
 
+  env: { heap: new WebAssembly.Memory({ initial: 1 }), size: 1 },
   output: ""
 };
 
 export async function runPython(pythonSrouce: string): Promise<number> {
   const wat = compile(pythonSrouce);
-  return run(wat)
+  return run(wat, importObject)
 }
 
-export async function run(watSource: string): Promise<number> {
+export async function run(watSource: string, importObj: typeof importObject): Promise<number> {
   const wabtApi = await wabt();
   // Next three lines are wat2wasm
   const parsed = wabtApi.parseWat("example", watSource);
   const binary = parsed.toBinary({});
-  const wasmModule = await WebAssembly.instantiate(binary.buffer, importObject as any);
+  const wasmModule = await WebAssembly.instantiate(binary.buffer, importObj as any);
 
   // This next line is wasm-interp
   return (wasmModule.instance.exports as any)._start();
