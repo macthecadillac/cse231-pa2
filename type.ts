@@ -99,6 +99,11 @@ export function buildTypedAST(stmts: Stmt[],
   const addTypes = (stmt: Stmt) => {
     switch (stmt.tag) {
       case "assign": {
+        // the previous steps registered all the declared variables so if
+        // something isn't registered it is not declared
+        if (!varScope.has(stmt.name)) {
+          throw new NotAVariable(stmt.name);
+        }
         const rhsType = inferExprType(stmt.value, varScope, funcScope);
         const lhsType = varScope.get(stmt.name);
         if (rhsType != lhsType) {
