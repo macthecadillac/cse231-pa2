@@ -30,6 +30,13 @@ describe('run(source, config) function', () => {
     expect(config.importObject.output).to.equal("1337\n");
   });
 
+
+  // BINARY OPERATORS
+  it('`is` operation', async() => {
+    const result = await runPython("(1 + 2) * 3");
+    expect(result).to.equal(9);
+  });
+
   // Note: it is often helpful to write tests for a functionality before you
   // implement it. You will make this test pass!
   it('adds two numbers', async() => {

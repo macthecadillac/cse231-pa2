@@ -32,24 +32,29 @@ export class REPL {
           const params = stmt.parameters.map(s => s.type_);
           this.funcScope.set(stmt.name, { parameterTypes: params,
                                           outputType: stmt.outputType});
-          this.intermediateOutput.addDef(stmt);
         }
       }
     }
 
+    // set up tmp watBuilder by deep-copying
     const wb = new watBuilder([], true);
     wb.replGlobalVarMap = this.intermediateOutput.replGlobalVarMap;
     wb.topLevel = true;
     wb.nextPtr = this.intermediateOutput.nextPtr;
+    wb.decl = this.intermediateOutput.decl;
+    wb.defs = this.intermediateOutput.defs;
+
+    // extend watBuilder
     wb.addStmts(typedASTPart);
+
+    // propagate ptr size changes to the watBuilder template
     this.intermediateOutput.nextPtr = wb.nextPtr;
+    this.intermediateOutput.defs = wb.defs;
     // grow memory when necessary
     if (wb.nextPtr >= this.env.env.size * 64000) {
       this.env.env.heap.grow(this.env.env.size);
       this.env.env.size *= 2;
     }
-    wb.defs = this.intermediateOutput.defs;
-    wb.decl = this.intermediateOutput.decl;
     const wat = wb.toWat();
     return [run(wat, this.env), wat];
   }

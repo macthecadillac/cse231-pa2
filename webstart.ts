@@ -102,6 +102,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             const wat = r[1];
             code.textContent += wat;
 
+            const output = document.getElementById("script-output");
+            output.textContent = "";
+
             // execute the code
             r[0].then(result => {
               renderResult(result);

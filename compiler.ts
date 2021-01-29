@@ -141,7 +141,7 @@ export class watBuilder {
           case "number":
             return this.addInstr([`(i32.const ${literal.value})`]);
           default:
-            throw new Error("None not implemented yet");
+            return this
         }
       }
       case "call": 
@@ -158,25 +158,38 @@ export class watBuilder {
         return this.addExpr(expr.arg).addInstr(instr);
       }
       case "binop": {
-        const binop = (() => {
-          switch (expr.binop) {
-            case "+": return "add";
-            case "-": return "sub";
-            case "*": return "mul";
-            case "//": return "div_s";
-            case "%": return "rem_s";
-            case "==": return "eq";
-            case "!=": return "ne";
-            case "<=": return "le_s";
-            case ">=": return "ge_s";
-            case "<": return "lt_s";
-            case ">": return "gt_s";
-            case "is": throw new Error("Not implemented");
+        if (expr.binop == "is") {
+          if (expr.arg1.type_ == "none") {
+            // None is None is always true
+            return this.addExpr({ tag: "literal",
+                                  value: { tag: "bool",
+                                           value: true },
+                                  type_: "bool" });
+          } else {
+            throw new Error("Not implemented");
           }
-        })();
-        return this.addExpr(expr.arg1)
-                   .addExpr(expr.arg2)
-                   .addInstr([`(i32.${binop})`]);
+        } else {
+          const binop = (() => {
+            switch (expr.binop) {
+              case "+": return "add";
+              case "-": return "sub";
+              case "*": return "mul";
+              case "//": return "div_s";
+              case "%": return "rem_s";
+              case "==": return "eq";
+              case "!=": return "ne";
+              case "<=": return "le_s";
+              case ">=": return "ge_s";
+              case "<": return "lt_s";
+              case ">": return "gt_s";
+              default:
+                throw new Error("Not implemented");
+            }
+          })();
+          return this.addExpr(expr.arg1)
+                     .addExpr(expr.arg2)
+                     .addInstr([`(i32.${binop})`]);
+        }
       }
       case "parens": 
         return this.addExpr(expr.expr);
@@ -474,7 +487,6 @@ export class watBuilder {
       (this.implReturn) ? ["(local.get $___IMPL_RET)))"] : [""]
     );
 
-    console.log(code);
     return format(code).join("\n");
   }
 }

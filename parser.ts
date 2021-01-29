@@ -243,6 +243,13 @@ export function traverseExpr(s: string, t: TreeCursor): Expr {
         type_: "bool"
       };
     }
+    case "None": {
+      return {
+        tag: "literal",
+        value: { tag: "none" },
+        type_: "none"
+      }
+    }
     case "VariableName":
       return { tag: "id", name: s.substring(t.from, t.to), type_: "" };
     case "CallExpression": {
@@ -269,8 +276,6 @@ export function traverseExpr(s: string, t: TreeCursor): Expr {
         switch (s.substring(t.from, t.to)) {
           case "-": return "neg" as UniOp;
           case "not": return "not" as UniOp;
-          default:
-            throw new Error(`Not implemented at ${t.from} ${t.to}: ${s.substring(t.from, t.to)}`);
         }
       })();
       t.nextSibling();
@@ -282,15 +287,7 @@ export function traverseExpr(s: string, t: TreeCursor): Expr {
       t.firstChild();
       const arg1 = traverseExpr(s, t);
       t.nextSibling();
-      const binop = (() => {
-        const str = s.substring(t.from, t.to);
-        const intOps = ["+", "-", "*", "//", "%", "==", "!=", ">=", "<=", ">", "<"];
-        if (intOps.includes(str)) {
-          return str as BinOp;
-        } else {
-            throw new Error(`Not implemented at ${t.from} ${t.to}: ${s.substring(t.from, t.to)}`);
-        }
-      })();
+      const binop = s.substring(t.from, t.to) as BinOp;
       t.nextSibling();
       const arg2 = traverseExpr(s, t);
       t.parent();
