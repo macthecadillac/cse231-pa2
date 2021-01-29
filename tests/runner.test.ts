@@ -14,46 +14,106 @@ beforeEach(function () {
 describe('run(source, config) function', () => {
   const config = { importObject };
   
-  // We can test the behavior of the compiler in several ways:
-  // 1- we can test the return value of a program
-  // Note: since run is an async function, we use await to retrieve the 
-  // asynchronous return value. 
-  it('returns the right number', async () => {
+  // IMPLCIT RETURNS
+  it('implicit return', async () => {
     const result = await runPython("987");
     expect(result).to.equal(987);
   });
 
-  // 2- we can test the behavior of the compiler by also looking at the log 
-  // resulting from running the program
-  it('prints something right', async() => {
+  // PRINT FUNCTIONS
+  it('print int', async() => {
     var result = await runPython("print(1337)");
     expect(config.importObject.output).to.equal("1337\n");
   });
 
+  it('print bool (true)', async() => {
+    var result = await runPython("print(False)");
+    expect(config.importObject.output).to.equal("False\n");
+  });
+
+  it('print bool (false)', async() => {
+    var result = await runPython("print(True)");
+    expect(config.importObject.output).to.equal("True\n");
+  });
+
+  it('print none', async() => {
+    var result = await runPython("print(None)");
+    expect(config.importObject.output).to.equal("None\n");
+  });
+
+  // UNARY OPERATORS
+  it('`neg` operator', async() => {
+    const result = await runPython("x: int = 1\n-x");
+    expect(result).to.equal(-1);
+  });
+
+  it('`not` operator', async() => {
+    const result = await runPython("x: bool = True\nnot x");
+    expect(result).to.equal(0);
+  });
 
   // BINARY OPERATORS
-  it('`is` operation', async() => {
-    const result = await runPython("(1 + 2) * 3");
-    expect(result).to.equal(9);
+  it('`+` operator', async() => {
+    const result = await runPython("2 + 3");
+    expect(result).to.equal(5);
   });
 
-  // Note: it is often helpful to write tests for a functionality before you
-  // implement it. You will make this test pass!
-  it('adds two numbers', async() => {
-    const result = await runPython("print(2 + 3)");
-    expect(config.importObject.output).to.equal("5\n");
+  it('`-` operator', async() => {
+    const result = await runPython("2 - 3");
+    expect(result).to.equal(-1);
   });
 
-  it('subtracts two numbers', async() => {
-    const result = await runPython("print(2 - 3)");
-    expect(config.importObject.output).to.equal("-1\n");
+  it('`*` operator', async() => {
+    const result = await runPython("10 * 12");
+    expect(result).to.equal(120);
   });
 
-  it('multiplies two numbers', async() => {
-    const result = await runPython("print(2 * 3)");
-    expect(config.importObject.output).to.equal("6\n");
+  it('`//` operator', async() => {
+    const result = await runPython("20 // 2");
+    expect(result).to.equal(10);
   });
 
+  it('`%` operator', async() => {
+    const result = await runPython("12 % 5");
+    expect(result).to.equal(2);
+  });
+
+  it('`==` operator', async() => {
+    const result = await runPython("12 == 11");
+    expect(result).to.equal(0);
+  });
+
+  it('`!=` operator', async() => {
+    const result = await runPython("12 != 11");
+    expect(result).to.equal(1);
+  });
+
+  it('`>` operator', async() => {
+    const result = await runPython("12 > 11");
+    expect(result).to.equal(1);
+  });
+
+  it('`<` operator', async() => {
+    const result = await runPython("4 < 3");
+    expect(result).to.equal(0);
+  });
+
+  it('`>=` operator', async() => {
+    const result = await runPython("3 >= 3");
+    expect(result).to.equal(1);
+  });
+
+  it('`<=` operator', async() => {
+    const result = await runPython("4 <= 3");
+    expect(result).to.equal(0);
+  });
+
+  it('`is` operator', async() => {
+    const result = await runPython("None is None");
+    expect(result).to.equal(1);
+  });
+
+  // functions
   it('eval function w/ if-else', async() => {
     const source = [
       "def lt3(x: int) -> bool:",
@@ -133,6 +193,7 @@ describe('run(source, config) function', () => {
     expect(config.importObject.output).to.equal("4\n");
   });
 
+  // BUILTIN FUNCTIONS (not print)
   it('max', async() => {
     const result = await runPython("max(1, 2)");
     expect(result).to.equal(2);
@@ -153,6 +214,7 @@ describe('run(source, config) function', () => {
     expect(result).to.equal(8);
   });
 
+  // MISC
   it('multiple binary operators', async() => {
     const result = await runPython("1 + 2 * 3");
     expect(result).to.equal(7);
