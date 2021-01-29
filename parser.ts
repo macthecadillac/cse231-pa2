@@ -182,7 +182,8 @@ export function traverseExpr(s: string, t: TreeCursor): Expr {
         tag: "literal",
         value: {
           tag: "number",
-          value: Number(s.substring(t.from, t.to)) }
+          value: Number(s.substring(t.from, t.to)) },
+        type_: "int"
       };
     case "Boolean": {
       const bool = (() => {
@@ -196,11 +197,12 @@ export function traverseExpr(s: string, t: TreeCursor): Expr {
         value: {
           tag: "bool",
           value: bool
-        }
+        },
+        type_: "bool"
       };
     }
     case "VariableName":
-      return { tag: "id", name: s.substring(t.from, t.to) };
+      return { tag: "id", name: s.substring(t.from, t.to), type_: "" };
     case "CallExpression": {
       t.firstChild(); // Focus name
       const name = s.substring(t.from, t.to);
@@ -216,7 +218,7 @@ export function traverseExpr(s: string, t: TreeCursor): Expr {
 
       t.parent();
       t.parent();
-      return { tag: "call", name, arguments: argList };
+      return { tag: "call", name, arguments: argList, type_: "" };
     }
     case "UnaryExpression": {
       t.firstChild();
@@ -231,7 +233,7 @@ export function traverseExpr(s: string, t: TreeCursor): Expr {
       t.nextSibling();
       const arg = traverseExpr(s, t);
       t.parent();
-      return { tag: "uniop", arg, uniop }
+      return { tag: "uniop", arg, uniop, type_: "" }
     }
     case "BinaryExpression": {
       t.firstChild();
@@ -249,7 +251,7 @@ export function traverseExpr(s: string, t: TreeCursor): Expr {
       t.nextSibling();
       const arg2 = traverseExpr(s, t);
       t.parent();
-      return { tag: "binop", arg1, arg2, binop };
+      return { tag: "binop", arg1, arg2, binop, type_: "" };
     }
     case "ParenthesizedExpression": {
       t.firstChild(); // focuses on "("
@@ -257,7 +259,7 @@ export function traverseExpr(s: string, t: TreeCursor): Expr {
       const e = traverseExpr(s, t);
       console.log(e);
       t.parent();
-      return { tag: "parens", expr: e }
+      return { tag: "parens", expr: e, type_: "" }
     }
   }
 }

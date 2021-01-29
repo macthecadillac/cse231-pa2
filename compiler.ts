@@ -1,9 +1,7 @@
 import { Stmt, Expr, countDefDeclStmts } from './ast';
 import { parseProgram, traverseExpr } from './parser';
-import { typeCheckProgram } from './typechecker';
+import { buildTypedAST } from './typechecker';
 import { CompilerError } from './errors';
-
-// (window as any)["runWat"] = run;
 
 function declTmpVar(n: number, m: number): string[] {
   if (m > n) {
@@ -33,14 +31,14 @@ export class watBuilder {
   decl: string[];
   body: string[];
   stackSize: number;
-  printLast: boolean;
+  implReturn: boolean;
 
   constructor() {
     this.defs = [];
     this.decl = [];
     this.body = [];
     this.stackSize = 0;
-    this.printLast = false;
+    this.implReturn = false;
   }
 
   addInstr(instr: string[]): watBuilder {
@@ -56,10 +54,6 @@ export class watBuilder {
   setStackSize(size: number): watBuilder {
     this.stackSize = size;
     return this
-  }
-
-  toCode(): string[] {
-      return this.decl.concat(this.body);
   }
 
   addExpr(expr: Expr): watBuilder {
@@ -199,6 +193,15 @@ export class watBuilder {
       case "min": return this.addMinInline(expr.arguments[0], expr.arguments[1]);
       case "pow": return this.addPowInline(expr.arguments[0], expr.arguments[1]);
       case "abs": return this.addAbsInline(expr.arguments[0]);
+      case "print": {
+        switch (expr.arguments[0].type_) {
+          case "int": return this.addExpr(expr.arguments[0])
+                                 .addInstr(["(call $printI32)"]);
+          case "bool": return this.addExpr(expr.arguments[0])
+                                  .addInstr(["(call $printBool)"]);
+          case "none": return this.addInstr(["(call $printNone)"]);
+        }
+      }
       default: 
         console.log("addCall");
         console.log(expr);
@@ -254,8 +257,9 @@ export class watBuilder {
           pred: {
             tag: "binop",
             binop: "==",
-            arg1: { tag: "id", name: "___EARLY_RET" },
-            arg2: { tag: "literal", value: { tag: "number", value: 0 } }
+            arg1: { tag: "id", name: "___EARLY_RET", type_: "bool" },
+            arg2: { tag: "literal", value: { tag: "bool", value: false }, type_: "bool" },
+            type_: "bool"
           },
           body1: (dists.length > 0) ? earlyRet(remainder, dists) : remainder,
           body2: []
@@ -283,7 +287,8 @@ export class watBuilder {
       .join(" ");
 
     this.defs = ([`(func $${stmt.name} ${inputOutput}`])
-      .concat(iout2.toCode(), nestedDefs.toCode());
+      .concat(iout2.decl.concat(iout2.body),
+              nestedDefs.decl.concat(nestedDefs.body));
     return this
   }
 
@@ -291,8 +296,11 @@ export class watBuilder {
     if (stmts.length == 0) {
       return this
     } else {
-      if (stmts[stmts.length - 1].tag == "expr") {
-        this.printLast = true;
+      const lastStmt = stmts[stmts.length - 1];
+      if (lastStmt.tag == "expr") {
+        if (lastStmt.expr.type_ != "none") {
+          this.implReturn = true;
+        }
       }
       return stmts.reduce((acc, s) => acc.addStmt(s), this);
     }
@@ -317,8 +325,12 @@ export class watBuilder {
         // the typechecker should prevent this EXCEPT for a lone expression at the
         // end of the program which will be implicitly returned
         // TODO: make into a print statement
-        return this.addExpr(stmt.expr)
-                   .addInstr(["(local.set $___IMPL_RET)"]);
+        if (stmt.expr.type_ == "none") {
+          return this.addExpr(stmt.expr);
+        } else {
+          return this.addExpr(stmt.expr)
+                     .addInstr(["(local.set $___IMPL_RET)"]);
+        }
       case "if": {
         const tmp = this.addExpr(stmt.pred)
                         .addInstr(["(if", "(then"])  // typechecker disallows empty body1
@@ -373,12 +385,12 @@ function indent(code: string[]): string[] {
 
 export function compile(source: string): string {
   const ast = parseProgram(source);
-  typeCheckProgram(ast);
+  const typedAST = buildTypedAST(ast);
 
   // number of define statements
-  const n = countDefDeclStmts(ast);
-  const defStmts = ast.slice(0, n);
-  const rest = ast.slice(n);
+  const n = countDefDeclStmts(typedAST);
+  const defStmts = typedAST.slice(0, n);
+  const rest = typedAST.slice(n);
 
   // turn the ast into wat code (wrapped in watBuilder)
   const iout = defStmts
@@ -391,19 +403,22 @@ export function compile(source: string): string {
     .addStmts(defStmts.filter(s => s.tag == "define"))
     .addStmts(rest);
 
-  let progBody = iout.toCode();
-  if (!iout.printLast) {
+  let progBody = iout.decl.concat(iout.body);
+  if (!iout.implReturn) {
     progBody[progBody.length - 1] += "))";
   }
-  const out = (iout.printLast) ? "(result i32)" : "";
+  const out = (iout.implReturn) ? "(result i32)" : "";
 
   const code = ["(module"].concat(
-    [`(func $print (import "imports" "print") (param i32) (result i32))`],
+    [`(func $printI32 (import "imports" "printI32") (param i32))`],
+    [`(func $printBool (import "imports" "printBool") (param i32))`],
+    [`(func $printNone (import "imports" "printNone"))`],
+    [`(func $pow (import "imports" "pow") (param i32) (param i32) (result i32))`],
     iout.defs,
     [`(func (export "_start") ${out}`],
     ["(local $___IMPL_RET i32)"],
     progBody,
-    (iout.printLast) ? ["(local.get $___IMPL_RET)))"] : [""]
+    (iout.implReturn) ? ["(local.get $___IMPL_RET)))"] : [""]
   );
 
   return indent(code).join("\n");

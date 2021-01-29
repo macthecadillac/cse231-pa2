@@ -1,4 +1,5 @@
 import { compile } from '../compiler';
+<<<<<<< HEAD
 import { runPython } from '../runner';
 import { expect } from 'chai';
 import 'mocha';
@@ -18,6 +19,11 @@ const importObject = {
 
   output: ""
 };
+=======
+import { expect } from 'chai';
+import 'mocha';
+import { importObject, runPython } from '../runner';
+>>>>>>> tmp
 
 // Clear the output before every test
 beforeEach(function () {
@@ -46,30 +52,21 @@ describe('run(source, config) function', () => {
     expect(config.importObject.output).to.equal("1337\n");
   });
 
-  // 3- we can also combine both type of assertions, or feel free to use any 
-  // other assertions provided by chai.
-  it('prints two numbers but returns last one', async () => {
-    var result = await runPython("print(987)");
-    expect(result).to.equal(987);
-    result = await runPython("print(123)");
-    expect(result).to.equal(123);
-  });
-    
   // Note: it is often helpful to write tests for a functionality before you
   // implement it. You will make this test pass!
   it('adds two numbers', async() => {
-    const result = await runPython("2 + 3");
-    expect(result).to.equal(5);
+    const result = await runPython("print(2 + 3)");
+    expect(config.importObject.output).to.equal("5\n");
   });
 
   it('subtracts two numbers', async() => {
-    const result = await runPython("2 - 3");
-    expect(result).to.equal(-1);
+    const result = await runPython("print(2 - 3)");
+    expect(config.importObject.output).to.equal("-1\n");
   });
 
   it('multiplies two numbers', async() => {
-    const result = await runPython("2 * 3");
-    expect(result).to.equal(6);
+    const result = await runPython("print(2 * 3)");
+    expect(config.importObject.output).to.equal("6\n");
   });
 
   it('eval function w/ if-else', async() => {
@@ -79,10 +76,10 @@ describe('run(source, config) function', () => {
       "        return True",
       "    else:",
       "        return False",
-      "lt3(4)"
+      "print(lt3(4))"
     ].join("\n");
     const result = await runPython(source);
-    expect(result).to.equal(0);
+    expect(config.importObject.output).to.equal("False\n");
   });
 
   it('eval function w/ if no else', async() => {
@@ -91,20 +88,20 @@ describe('run(source, config) function', () => {
       "    if x < 3:",
       "        return True",
       "    return False",
-      "lt3(4)"
+      "print(lt3(4))"
     ].join("\n");
     const result = await runPython(source);
-    expect(result).to.equal(0);
+    expect(config.importObject.output).to.equal("False\n");
   });
 
   it('eval function w/ immediate return', async() => {
     const source = [
       "def always_true(x: int) -> bool:",
       "    return True",
-      "always_true(4)"
+      "print(always_true(4))"
     ].join("\n");
     const result = await runPython(source);
-    expect(result).to.equal(1);
+    expect(config.importObject.output).to.equal("True\n");
   });
 
   it('eval function w/ early return in some branches', async() => {
@@ -115,10 +112,10 @@ describe('run(source, config) function', () => {
       "    else:",
       "        x = x + 1",
       "    return False",
-      "lt3(4)"
+      "print(lt3(4))"
     ].join("\n");
     const result = await runPython(source);
-    expect(result).to.equal(0);
+    expect(config.importObject.output).to.equal("False\n");
   });
 
   it('eval function w/ early return in some branches', async() => {
@@ -129,10 +126,10 @@ describe('run(source, config) function', () => {
       "    else:",
       "        x = x + 1",
       "    return False",
-      "lt3(1)"
+      "print(lt3(1))"
     ].join("\n");
     const result = await runPython(source);
-    expect(result).to.equal(1);
+    expect(config.importObject.output).to.equal("True\n");
   });
 
   it('eval while-loop', async() => {
@@ -140,14 +137,14 @@ describe('run(source, config) function', () => {
       "x: int = 0",
       "while x < 10:",
       "    x = x + 1",
-      "x"
+      "print(x)"
     ].join("\n");
     const result = await runPython(source);
-    expect(result).to.equal(10);
+    expect(config.importObject.output).to.equal("10\n");
   });
 
   it('define a variable, add a number to it, and print the result', async() => {
-    const result = await runPython("x = 2\nprint(x + 2)");
+    const result = await runPython("x: int = 2\nprint(x + 2)");
     expect(config.importObject.output).to.equal("4\n");
   });
 
