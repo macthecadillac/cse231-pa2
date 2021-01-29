@@ -1,7 +1,14 @@
 import { Stmt, Expr, countDefDeclStmts } from './ast';
 import { parseProgram, traverseExpr } from './parser';
-import { buildTypedAST } from './typechecker';
+import { buildTypedAST } from './type';
 import { CompilerError } from './errors';
+
+export function compile(source: string): string {
+  const ast = parseProgram(source);
+  const typedAST = buildTypedAST(ast);
+  const wb = new watBuilder(typedAST);
+  return wb.toWat();
+}
 
 function declTmpVar(n: number, m: number): string[] {
   if (m > n) {
@@ -26,6 +33,28 @@ export function nestedRets(stmt: Stmt): boolean {
   }
 }
 
+// TODO: expand to a full-on reformating function so we can get rid of the
+// mutable append parentheses statements and just use concat in the normal code.
+// We will instead append the free parentheses to previous lines in this
+// function.
+function format(code: string[]): string[] {
+  const indented: [number, string[]] =
+    code.reduce((acc: [number, string[]], s: string) => {
+      let cnt = 0;
+      for (const c of s) {
+        if (c == "(") {
+          cnt += 1;
+        } else if (c == ")") {
+          cnt -= 1;
+        }
+      }
+      const indentLvl = cnt + acc[0];
+      const code_ = acc[1].concat(["  ".repeat(acc[0]) + s]);
+      return [indentLvl, code_] as [number, string[]]
+    }, [0, []]);
+  return indented[1];
+};
+
 export class watBuilder {
   defs: string[];
   decl: string[];
@@ -33,12 +62,28 @@ export class watBuilder {
   stackSize: number;
   implReturn: boolean;
 
-  constructor() {
+  constructor(ast: Stmt[] = []) {
     this.defs = [];
     this.decl = [];
     this.body = [];
     this.stackSize = 0;
     this.implReturn = false;
+
+    if (ast.length != 0) {
+      // number of define statements
+      const n = countDefDeclStmts(ast);
+      const defStmts = ast.slice(0, n);
+      const rest = ast.slice(n);
+
+      // turn the ast into wat code (wrapped in watBuilder)
+      for (const s of defStmts.filter(s => s.tag == "assign")) {
+        if (s.tag != "assign") { throw new Error("Compiler error. Check code.") }
+        this.addStmt(s);
+        this.addDecl([`(local $${s.name} i32)`]);
+      }
+      this.addStmts(defStmts.filter(s => s.tag == "define"))
+      this.addStmts(rest);
+    }
   }
 
   addInstr(instr: string[]): watBuilder {
@@ -286,7 +331,7 @@ export class watBuilder {
 
     this.defs = this.defs.concat([`(func $${stmt.name} ${inputOutput}`],
                                  iout2.decl.concat(iout2.body),
-                                 nestedDefs.decl.concat(nestedDefs.body));
+                                 nestedDefs.defs);
     return this
   }
 
@@ -357,71 +402,25 @@ export class watBuilder {
       case "pass": return this.addInstr([""])
     }
   }
-}
 
-// TODO: expand to a full-on reformating function so we can get rid of the
-// mutable append parentheses statements and just use concat in the normal code.
-// We will instead append the free parentheses to previous lines in this
-// function.
-function indent(code: string[]): string[] {
-  const indented: [number, string[]] =
-    code.reduce((acc: [number, string[]], s: string) => {
-      let cnt = 0;
-      for (const c of s) {
-        if (c == "(") {
-          cnt += 1;
-        } else if (c == ")") {
-          cnt -= 1;
-        }
-      }
-      const indentLvl = cnt + acc[0];
-      const code_ = acc[1].concat(["  ".repeat(acc[0]) + s]);
-      return [indentLvl, code_] as [number, string[]]
-    }, [0, []]);
-  return indented[1];
-};
-
-export function compile(source: string): string {
-  const ast = parseProgram(source);
-  const typedAST = buildTypedAST(ast);
-
-  if (typedAST.length != 0) {
-    // number of define statements
-    const n = countDefDeclStmts(typedAST);
-    const defStmts = typedAST.slice(0, n);
-    const rest = typedAST.slice(n);
-
-    // turn the ast into wat code (wrapped in watBuilder)
-    const iout = defStmts
-      .filter(s => s.tag == "assign")
-      .reduce((acc, s) => {
-        if (s.tag != "assign") { throw new Error("Compiler error. Check code.") }
-        return acc.addStmt(s)
-                  .addDecl([`(local $${s.name} i32)`]);
-      }, new watBuilder)
-      .addStmts(defStmts.filter(s => s.tag == "define"))
-      .addStmts(rest);
-
-    let progBody = iout.decl.concat(iout.body);
-    if (!iout.implReturn) {
+  toWat(): string {
+    let progBody = this.decl.concat(this.body);
+    if (!this.implReturn) {
       progBody[progBody.length - 1] += "))";
     }
-    const out = (iout.implReturn) ? "(result i32)" : "";
+    const out = (this.implReturn) ? "(result i32)" : "";
 
     const code = ["(module"].concat(
       [`(func $printI32 (import "imports" "printI32") (param i32))`],
       [`(func $printBool (import "imports" "printBool") (param i32))`],
       [`(func $printNone (import "imports" "printNone"))`],
-      [`(func $pow (import "imports" "pow") (param i32) (param i32) (result i32))`],
-      iout.defs,
+      this.defs,
       [`(func (export "_start") ${out}`],
       ["(local $___IMPL_RET i32)"],
-      progBody,
-      (iout.implReturn) ? ["(local.get $___IMPL_RET)))"] : [""]
+      (progBody.length == 0) ? [")", ")"] : progBody,
+      (this.implReturn) ? ["(local.get $___IMPL_RET)))"] : [""]
     );
 
-    return indent(code).join("\n");
-  } else {
-    return "";
+    return format(code).join("\n");
   }
 }

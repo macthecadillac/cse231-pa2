@@ -141,7 +141,8 @@ export function traverseStmt(s: string, t: TreeCursor): Stmt {
       t.firstChild();
       t.nextSibling();
       const body = parseFollowingStmts(s, t);
-      if (body.length == 0) {
+      // nested defs don't count
+      if (body.filter(s => s.tag != "define").length == 0) {
         throw new ParseError("EOF")
       };
       t.parent();      // Pop to Body

@@ -19,6 +19,8 @@ export type Expr =
 
 export type Type = "" | "none" | "bool" | "int" | "polymorphic"
 
+export type FuncType = { parameterTypes: Type[], outputType: Type }
+
 export type Literal =
     { tag: "none", }
   | { tag: "bool", value: boolean }

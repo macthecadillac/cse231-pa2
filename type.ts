@@ -1,5 +1,6 @@
 import { TreeCursor } from 'lezer';
-import { varType, Stmt, Expr, Literal, UniOp, BinOp, Type, countDefDeclStmts } from './ast';
+import { varType, Stmt, Expr, Literal, UniOp, BinOp, Type,
+         FuncType, countDefDeclStmts } from './ast';
 import {
   BinaryOpTypeError,
   ConditionalExprTypeError,
@@ -15,25 +16,20 @@ import {
 
 // FIXME: the rhs of variable declaration can only be literals
 
-export function buildTypedAST(prog: Stmt[]): Stmt[] {
-  let builtin = new Map;
-  builtin.set("print", { parameterTypes: ["polymorphic"], outputType: "none" });
-  builtin.set("abs", { parameterTypes: ["int"], outputType: "int" });
-  builtin.set("max", { parameterTypes: ["int", "int"], outputType: "int" });
-  builtin.set("min", { parameterTypes: ["int", "int"], outputType: "int" });
-  builtin.set("pow", { parameterTypes: ["int", "int"], outputType: "int" });
-  return fillInStmtsTypeInfo(prog, new Map, builtin, "none");
-}
-
-type FuncType = { parameterTypes: Type[], outputType: Type }
+export const builtin = new Map;
+builtin.set("print", { parameterTypes: ["polymorphic"], outputType: "none" });
+builtin.set("abs", { parameterTypes: ["int"], outputType: "int" });
+builtin.set("max", { parameterTypes: ["int", "int"], outputType: "int" });
+builtin.set("min", { parameterTypes: ["int", "int"], outputType: "int" });
+builtin.set("pow", { parameterTypes: ["int", "int"], outputType: "int" });
 
 // A failure in the typechecking process leads to an unrecoverable failure so we
 // might as well throw an error and exit. A pass at this stage however does not
 // warrant any action.
-export function fillInStmtsTypeInfo(stmts: Stmt[],
-                                    outerVarScope: Map<string, Type>,
-                                    outerFuncScope: Map<string, FuncType>,
-                                    retType: Type): Stmt[] {
+export function buildTypedAST(stmts: Stmt[],
+                              outerVarScope: Map<string, Type> = new Map,
+                              outerFuncScope: Map<string, FuncType> = builtin,
+                              retType: Type = "none"): Stmt[] {
   // All the function definitions and variable declarations must be at the top
   // of the scope. The order of defs or decls doesn't matter--they can even be
   // interweaved, as long as no computation happens before then end of this
@@ -114,7 +110,7 @@ export function fillInStmtsTypeInfo(stmts: Stmt[],
         // check statements in the body, including matching return types to the
         // stated output type
         try {
-          fillInStmtsTypeInfo(stmt.body, varScope, funcScope, stmt.outputType);
+          buildTypedAST(stmt.body, varScope, funcScope, stmt.outputType);
         }
         catch(err) {
           if (err instanceof NotAVariable) {
@@ -127,7 +123,7 @@ export function fillInStmtsTypeInfo(stmts: Stmt[],
 
         checkReturnType(stmt.name, stmt.body, varScope, funcScope, stmt.outputType);
 
-        const body = fillInStmtsTypeInfo(stmt.body, varScope, funcScope, stmt.outputType);
+        const body = buildTypedAST(stmt.body, varScope, funcScope, stmt.outputType);
         return { ...stmt, body };
       }
       case "return": {
@@ -143,8 +139,8 @@ export function fillInStmtsTypeInfo(stmts: Stmt[],
           throw new ConditionalExprTypeError(t);
         }
         const pred = fillInExprTypeInfo(stmt.pred, varScope, funcScope);
-        const body1 = fillInStmtsTypeInfo(stmt.body1, varScope, funcScope, retType);
-        const body2 = fillInStmtsTypeInfo(stmt.body2, varScope, funcScope, retType);
+        const body1 = buildTypedAST(stmt.body1, varScope, funcScope, retType);
+        const body2 = buildTypedAST(stmt.body2, varScope, funcScope, retType);
         return { ...stmt, pred, body1, body2 };
       }
       case "while": {
@@ -153,7 +149,7 @@ export function fillInStmtsTypeInfo(stmts: Stmt[],
           throw new ConditionalExprTypeError(t);
         }
         const pred = fillInExprTypeInfo(stmt.pred, varScope, funcScope);
-        const body = fillInStmtsTypeInfo(stmt.body, varScope, funcScope, retType);
+        const body = buildTypedAST(stmt.body, varScope, funcScope, retType);
         return { ...stmt, pred, body };
       }
       case "pass": {

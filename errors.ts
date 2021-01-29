@@ -160,7 +160,7 @@ export class ParseError extends CompilerError {
   __proto__: CompilerError;
   token: string;
   constructor(token: string) {
-    super(`Parse CompilerError near token ${token}`);
+    super(`Parse error near token ${token}`);
     if (CompilerError.captureStackTrace) {
       CompilerError.captureStackTrace(this, NotDeclaredInScope)
     }

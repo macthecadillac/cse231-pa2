@@ -1,6 +1,7 @@
 import { compile } from './compiler';
 import { run, importObject } from './runner';
 import { CompilerError } from './errors';
+import { REPL } from './repl';
 
 const obj = importObject;
 
