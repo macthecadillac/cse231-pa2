@@ -57,8 +57,6 @@ export class watBuilder {
   }
 
   addExpr(expr: Expr): watBuilder {
-    console.log("addExpr");
-    console.log(expr);
     switch(expr.tag) {
       case "id":
         return this.addInstr([`(local.get $${expr.name})`]);
@@ -286,9 +284,9 @@ export class watBuilder {
       .concat(hasRet(rest) ?  [" (result i32)"] : [])
       .join(" ");
 
-    this.defs = ([`(func $${stmt.name} ${inputOutput}`])
-      .concat(iout2.decl.concat(iout2.body),
-              nestedDefs.decl.concat(nestedDefs.body));
+    this.defs = this.defs.concat([`(func $${stmt.name} ${inputOutput}`],
+                                 iout2.decl.concat(iout2.body),
+                                 nestedDefs.decl.concat(nestedDefs.body));
     return this
   }
 
@@ -356,7 +354,7 @@ export class watBuilder {
                    .addExpr(stmt.pred)
                    .addInstr(["(i32.const 1)", "(i32.xor)", "(br_if 1)", "(br 0))))"]);
       }
-      case "pass": return this
+      case "pass": return this.addInstr([""])
     }
   }
 }
@@ -387,39 +385,43 @@ export function compile(source: string): string {
   const ast = parseProgram(source);
   const typedAST = buildTypedAST(ast);
 
-  // number of define statements
-  const n = countDefDeclStmts(typedAST);
-  const defStmts = typedAST.slice(0, n);
-  const rest = typedAST.slice(n);
+  if (typedAST.length != 0) {
+    // number of define statements
+    const n = countDefDeclStmts(typedAST);
+    const defStmts = typedAST.slice(0, n);
+    const rest = typedAST.slice(n);
 
-  // turn the ast into wat code (wrapped in watBuilder)
-  const iout = defStmts
-    .filter(s => s.tag == "assign")
-    .reduce((acc, s) => {
-      if (s.tag != "assign") { throw new Error("Compiler error. Check code.") }
-      return acc.addStmt(s)
-                .addDecl([`(local $${s.name} i32)`]);
-    }, new watBuilder)
-    .addStmts(defStmts.filter(s => s.tag == "define"))
-    .addStmts(rest);
+    // turn the ast into wat code (wrapped in watBuilder)
+    const iout = defStmts
+      .filter(s => s.tag == "assign")
+      .reduce((acc, s) => {
+        if (s.tag != "assign") { throw new Error("Compiler error. Check code.") }
+        return acc.addStmt(s)
+                  .addDecl([`(local $${s.name} i32)`]);
+      }, new watBuilder)
+      .addStmts(defStmts.filter(s => s.tag == "define"))
+      .addStmts(rest);
 
-  let progBody = iout.decl.concat(iout.body);
-  if (!iout.implReturn) {
-    progBody[progBody.length - 1] += "))";
+    let progBody = iout.decl.concat(iout.body);
+    if (!iout.implReturn) {
+      progBody[progBody.length - 1] += "))";
+    }
+    const out = (iout.implReturn) ? "(result i32)" : "";
+
+    const code = ["(module"].concat(
+      [`(func $printI32 (import "imports" "printI32") (param i32))`],
+      [`(func $printBool (import "imports" "printBool") (param i32))`],
+      [`(func $printNone (import "imports" "printNone"))`],
+      [`(func $pow (import "imports" "pow") (param i32) (param i32) (result i32))`],
+      iout.defs,
+      [`(func (export "_start") ${out}`],
+      ["(local $___IMPL_RET i32)"],
+      progBody,
+      (iout.implReturn) ? ["(local.get $___IMPL_RET)))"] : [""]
+    );
+
+    return indent(code).join("\n");
+  } else {
+    return "";
   }
-  const out = (iout.implReturn) ? "(result i32)" : "";
-
-  const code = ["(module"].concat(
-    [`(func $printI32 (import "imports" "printI32") (param i32))`],
-    [`(func $printBool (import "imports" "printBool") (param i32))`],
-    [`(func $printNone (import "imports" "printNone"))`],
-    [`(func $pow (import "imports" "pow") (param i32) (param i32) (result i32))`],
-    iout.defs,
-    [`(func (export "_start") ${out}`],
-    ["(local $___IMPL_RET i32)"],
-    progBody,
-    (iout.implReturn) ? ["(local.get $___IMPL_RET)))"] : [""]
-  );
-
-  return indent(code).join("\n");
 }

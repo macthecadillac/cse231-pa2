@@ -155,4 +155,9 @@ describe('run(source, config) function', () => {
     const result = await runPython("(1 + 2) * 3");
     expect(result).to.equal(9);
   });
+
+  it('parenthesized expressions', async() => {
+    const result = await runPython("(1 + 2) * 3");
+    expect(result).to.equal(9);
+  });
 });

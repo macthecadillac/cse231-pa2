@@ -1,16 +1,28 @@
-// custom error classes for better error handling
+// custom CompilerError classes for better error handling
 // FIXME: stack trace instance name
 import { BinOp, Type, UniOp } from './ast';
 
-export class BinaryOpTypeError extends Error {
+export class CompilerError extends Error {
   __proto__: Error;
+  constructor(msg?: string) {
+    super(msg);
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, NotAVariable)
+    }
+    this.name = 'CompilerError';
+    this.__proto__ = new.target.prototype;
+  }
+}
+
+export class BinaryOpTypeError extends CompilerError {
+  __proto__: CompilerError;
   op: BinOp;
   t1: Type;
   t2: Type;
   constructor(op: BinOp, t1: Type, t2: Type) {
     super(`Cannot apply operator \`${op}\` on types \`${t1}\` and \`${t2}\``);
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, NotDeclaredInScope)
+    if (CompilerError.captureStackTrace) {
+      CompilerError.captureStackTrace(this, NotDeclaredInScope)
     }
 
     this.name = 'BinaryOpTypeError'
@@ -21,25 +33,13 @@ export class BinaryOpTypeError extends Error {
   }
 }
 
-export class CompilerError extends Error {
-  __proto__: Error;
-  constructor() {
-    super();
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, NotAVariable)
-    }
-    this.name = 'CompilerError';
-    this.__proto__ = new.target.prototype;
-  }
-}
-
-export class ConditionalExprTypeError extends Error {
-  __proto__: Error;
+export class ConditionalExprTypeError extends CompilerError {
+  __proto__: CompilerError;
   conditionalType: Type;
   constructor(conditionalType: Type) {
     super(`Conditional expression cannot be of type \`${conditionalType}\``);
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, NotAVariable)
+    if (CompilerError.captureStackTrace) {
+      CompilerError.captureStackTrace(this, NotAVariable)
     }
 
     this.name = 'ConditionalExprTypeError'
@@ -48,13 +48,13 @@ export class ConditionalExprTypeError extends Error {
   }
 }
 
-export class DuplicateDeclaration extends Error {
-  __proto__: Error;
+export class DuplicateDeclaration extends CompilerError {
+  __proto__: CompilerError;
   ident: string
   constructor(ident: string) {
     super(`Duplicate declaration of identifier in same scope: ${ident}`);
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, DuplicateDeclaration)
+    if (CompilerError.captureStackTrace) {
+      CompilerError.captureStackTrace(this, DuplicateDeclaration)
     }
 
     this.name = 'DuplicateDeclaration'
@@ -62,13 +62,13 @@ export class DuplicateDeclaration extends Error {
     this.__proto__ = new.target.prototype;
   }
 }
-export class NotAFunctionOrClass extends Error {
-  __proto__: Error;
+export class NotAFunctionOrClass extends CompilerError {
+  __proto__: CompilerError;
   objName: string;
   constructor(objName: string) {
     super(`Not a function or class: ${objName}`);
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, NotAVariable)
+    if (CompilerError.captureStackTrace) {
+      CompilerError.captureStackTrace(this, NotAVariable)
     }
 
     this.name = 'NotAFunctionOrClass'
@@ -77,13 +77,13 @@ export class NotAFunctionOrClass extends Error {
   }
 }
 
-export class NotAVariable extends Error {
-  __proto__: Error;
+export class NotAVariable extends CompilerError {
+  __proto__: CompilerError;
   varName: string;
   constructor(varName: string) {
     super(`Not a variable: ${varName}`);
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, NotAVariable)
+    if (CompilerError.captureStackTrace) {
+      CompilerError.captureStackTrace(this, NotAVariable)
     }
 
     this.name = 'NotAVariable'
@@ -92,13 +92,13 @@ export class NotAVariable extends Error {
   }
 }
 
-export class NotDeclaredInScope extends Error {
-  __proto__: Error;
+export class NotDeclaredInScope extends CompilerError {
+  __proto__: CompilerError;
   varName: string;
   constructor(varName: string) {
     super(`Cannot assign to variable that is not explicitly decalared in this scope: ${varName}`);
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, NotDeclaredInScope)
+    if (CompilerError.captureStackTrace) {
+      CompilerError.captureStackTrace(this, NotDeclaredInScope)
     }
 
     this.name = 'NotDeclaredInScope'
@@ -107,12 +107,12 @@ export class NotDeclaredInScope extends Error {
   }
 }
 
-export class MissingReturn extends Error {
-  __proto__: Error;
+export class MissingReturn extends CompilerError {
+  __proto__: CompilerError;
   constructor(f: string = "contains") {
     super(`All paths in this function/method must have a return statement: ${f}`);
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, NotDeclaredInScope)
+    if (CompilerError.captureStackTrace) {
+      CompilerError.captureStackTrace(this, NotDeclaredInScope)
     }
 
     this.name = 'MissingReturn'
@@ -120,14 +120,14 @@ export class MissingReturn extends Error {
   }
 }
 
-export class GeneralTypeError extends Error {
-  __proto__: Error;
+export class GeneralTypeError extends CompilerError {
+  __proto__: CompilerError;
   actualType: Type;
   expectedType: Type;
   constructor(actualType: Type, expectedType: Type) {
     super(`Expected type \`${expectedType}\`; got type \`${actualType}\``);
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, NotDeclaredInScope)
+    if (CompilerError.captureStackTrace) {
+      CompilerError.captureStackTrace(this, NotDeclaredInScope)
     }
 
     this.name = 'GeneralTypeError'
@@ -137,15 +137,15 @@ export class GeneralTypeError extends Error {
   }
 }
 
-export class FuncCallTypError extends Error {
-  __proto__: Error;
+export class FuncCallTypError extends CompilerError {
+  __proto__: CompilerError;
   actualType: Type;
   expectedType: Type;
   paramN: number;
   constructor(actualType: Type, expectedType: Type, paramN: number) {
     super(`Expected type \`${expectedType}\`; got type \`${actualType}\``);
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, FuncCallTypError)
+    if (CompilerError.captureStackTrace) {
+      CompilerError.captureStackTrace(this, FuncCallTypError)
     }
 
     this.name = 'FuncCallTypError'
@@ -156,13 +156,13 @@ export class FuncCallTypError extends Error {
   }
 }
 
-export class ParseError extends Error {
-  __proto__: Error;
+export class ParseError extends CompilerError {
+  __proto__: CompilerError;
   token: string;
   constructor(token: string) {
-    super(`Parse error near token ${token}`);
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, NotDeclaredInScope)
+    super(`Parse CompilerError near token ${token}`);
+    if (CompilerError.captureStackTrace) {
+      CompilerError.captureStackTrace(this, NotDeclaredInScope)
     }
 
     this.name = 'ParseError'
@@ -171,14 +171,14 @@ export class ParseError extends Error {
   }
 }
 
-export class UniaryOpTypeError extends Error {
-  __proto__: Error;
+export class UniaryOpTypeError extends CompilerError {
+  __proto__: CompilerError;
   op: UniOp;
   t: Type;
   constructor(op: UniOp, t: Type) {
     super(`Cannot apply operator \`${op}\` on type \`${t}\``);
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, NotDeclaredInScope)
+    if (CompilerError.captureStackTrace) {
+      CompilerError.captureStackTrace(this, NotDeclaredInScope)
     }
 
     this.name = 'UniaryOpTypeError'

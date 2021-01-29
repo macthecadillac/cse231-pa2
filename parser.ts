@@ -134,7 +134,7 @@ export function traverseStmt(s: string, t: TreeCursor): Stmt {
           }
           t.nextSibling(); // Focus on Body
         } else {
-          const outputType = "none";
+          return "none";
         }
       })();
       t.nextSibling();  // Focus on :
@@ -210,11 +210,12 @@ export function traverseExpr(s: string, t: TreeCursor): Expr {
       t.firstChild(); // Focus open paren
 
       const argList = [];
-      do {
-        t.nextSibling(); // Focus on parameter
+      t.nextSibling(); // Focus on , or )
+      while (s.substring(t.from, t.to) != ")") {
         argList.push(traverseExpr(s, t));
+        t.nextSibling(); // Focus on parameter
         t.nextSibling(); // Focus on , or )
-      } while (s.substring(t.from, t.to) != ")");
+      }
 
       t.parent();
       t.parent();
