@@ -10,14 +10,14 @@ export type Stmt =
   | { tag: "pass" }
 
 export type Expr = 
-    { tag: "literal", value: Literal }
-  | { tag: "id", name: string }
-  | { tag: "call", name: string, arguments: Expr[] }
-  | { tag: "uniop", uniop: UniOp, arg: Expr }
-  | { tag: "binop", binop: BinOp, arg1: Expr, arg2: Expr }
-  | { tag: "parens", expr: Expr }
+    { tag: "literal", value: Literal, type_: Type }
+  | { tag: "id", name: string, type_: Type }
+  | { tag: "call", name: string, arguments: Expr[], type_: Type }
+  | { tag: "uniop", uniop: UniOp, arg: Expr, type_: Type }
+  | { tag: "binop", binop: BinOp, arg1: Expr, arg2: Expr, type_: Type }
+  | { tag: "parens", expr: Expr, type_: Type }
 
-export type Type = "" | "none" | "bool" | "int" | "poly"
+export type Type = "" | "none" | "bool" | "int" | "polymorphic"
 
 export type Literal =
     { tag: "none", }

@@ -2,45 +2,8 @@ import { statSync } from 'fs';
 import wabt from 'wabt';
 import { Stmt, Expr, countDefDeclStmts } from './ast';
 import { parseProgram, traverseExpr } from './parser';
-import { typeCheckProgram } from './typechecker';
+import { buildTypedAST } from './typechecker';
 import { CompilerError } from './errors';
-
-export async function runPython(pythonSrouce: string): Promise<number> {
-  const wat = compile(pythonSrouce);
-  return run(wat)
-}
-
-export async function run(watSource: string): Promise<number> {
-  const wabtApi = await wabt();
-  const importObject = {
-    imports: {
-      // we typically define print to mean logging to the console. To make testing
-      // the compiler easier, we define print so it logs to a string object.
-      //  We can then examine output to see what would have been printed in the
-      //  console.
-      print: (arg : any) => {
-        importObject.output += arg;
-        importObject.output += "\n";
-        return arg;
-      },
-      pow: (x: number, y: number) => {
-        return Math.pow(x, y)
-      },
-    },
-
-    output: ""
-  };
-
-  // Next three lines are wat2wasm
-  const parsed = wabtApi.parseWat("example", watSource);
-  const binary = parsed.toBinary({});
-  const wasmModule = await WebAssembly.instantiate(binary.buffer, importObject as any);
-
-  // This next line is wasm-interp
-  return (wasmModule.instance.exports as any)._start();
-}
-
-// (window as any)["runWat"] = run;
 
 function declTmpVar(n: number, m: number): string[] {
   if (m > n) {
@@ -70,14 +33,14 @@ class watBuilder {
   decl: string[];
   body: string[];
   stackSize: number;
-  printLast: boolean;
+  implReturn: boolean;
 
   constructor() {
     this.defs = [];
     this.decl = [];
     this.body = [];
     this.stackSize = 0;
-    this.printLast = false;
+    this.implReturn = false;
   }
 
   addInstr(instr: string[]): watBuilder {
@@ -93,10 +56,6 @@ class watBuilder {
   setStackSize(size: number): watBuilder {
     this.stackSize = size;
     return this
-  }
-
-  toCode(): string[] {
-      return this.decl.concat(this.body);
   }
 
   addExpr(expr: Expr): watBuilder {
@@ -162,15 +121,13 @@ class watBuilder {
     const tmp = this.addExpr(arg1)
                     .addInstr(["(local.set $___TMP0)"])
                     .addExpr(arg2)
-                    .addInstr([
-                       "(local.set $___TMP1)",
-                       "(local.get $___TMP0)",
-                       "(local.get $___TMP1)",
-                       "(local.get $___TMP0)",
-                       "(local.get $___TMP1)",
-                       "(i32.gt_s)",
-                       "(select)"
-                     ]);
+                    .addInstr(["(local.set $___TMP1)",
+                               "(local.get $___TMP0)",
+                               "(local.get $___TMP1)",
+                               "(local.get $___TMP0)",
+                               "(local.get $___TMP1)",
+                               "(i32.gt_s)",
+                               "(select)"]);
     return tmp.addDecl(declTmpVar(tmp.stackSize, 2))
               .setStackSize(Math.max(2, tmp.stackSize));
   }
@@ -179,15 +136,13 @@ class watBuilder {
     const tmp = this.addExpr(arg1)
                     .addInstr(["(local.set $___TMP0)"])
                     .addExpr(arg2)
-                    .addInstr([
-                       "(local.set $___TMP1)",
-                       "(local.get $___TMP0)",
-                       "(local.get $___TMP1)",
-                       "(local.get $___TMP0)",
-                       "(local.get $___TMP1)",
-                       "(i32.lt_s)",
-                       "(select)"
-                     ]);
+                    .addInstr(["(local.set $___TMP1)",
+                               "(local.get $___TMP0)",
+                               "(local.get $___TMP1)",
+                               "(local.get $___TMP0)",
+                               "(local.get $___TMP1)",
+                               "(i32.lt_s)",
+                               "(select)"]);
     return tmp.addDecl(declTmpVar(tmp.stackSize, 2))
               .setStackSize(Math.max(2, tmp.stackSize));
   }
@@ -216,6 +171,15 @@ class watBuilder {
       case "max": return this.addMaxInline(expr.arguments[0], expr.arguments[1]);
       case "min": return this.addMinInline(expr.arguments[0], expr.arguments[1]);
       case "abs": return this.addAbsInline(expr.arguments[0]);
+      case "print": {
+        switch (expr.arguments[0].type_) {
+          case "int": return this.addExpr(expr.arguments[0])
+                                 .addInstr(["(call $printI32)"]);
+          case "bool": return this.addExpr(expr.arguments[0])
+                                  .addInstr(["(call $printBool)"]);
+          case "none": return this.addInstr(["(call $printNone)"]);
+        }
+      }
       default: 
         return expr.arguments.reduce((acc, e) => acc.addExpr(e), this)
                              .addInstr([`(call $${expr.name})`]);
@@ -262,8 +226,9 @@ class watBuilder {
           pred: {
             tag: "binop",
             binop: "==",
-            arg1: { tag: "id", name: "___EARLY_RET" },
-            arg2: { tag: "literal", value: { tag: "number", value: 0 } }
+            arg1: { tag: "id", name: "___EARLY_RET", type_: "bool" },
+            arg2: { tag: "literal", value: { tag: "bool", value: false }, type_: "bool" },
+            type_: "bool"
           },
           body1: (dists.length > 0) ? earlyRet(remainder, dists) : remainder,
           body2: []
@@ -290,7 +255,7 @@ class watBuilder {
       .concat(hasRet(rest) ?  [" (result i32)"] : [])
       .join(" ");
 
-    this.defs = ([`(func $${stmt.name} ${inputOutput}`]).concat(iout2.toCode());
+    this.defs = ([`(func $${stmt.name} ${inputOutput}`]).concat(iout2.decl.concat(iout2.body));
     return this
   }
 
@@ -298,8 +263,11 @@ class watBuilder {
     if (stmts.length == 0) {
       return this
     } else {
-      if (stmts[stmts.length - 1].tag == "expr") {
-        this.printLast = true;
+      const lastStmt = stmts[stmts.length - 1];
+      if (lastStmt.tag == "expr") {
+        if (lastStmt.expr.type_ != "none") {
+          this.implReturn = true;
+        }
       }
       return stmts.reduce((acc, s) => acc.addStmt(s), this);
     }
@@ -324,8 +292,12 @@ class watBuilder {
         // the typechecker should prevent this EXCEPT for a lone expression at the
         // end of the program which will be implicitly returned
         // TODO: make into a print statement
-        return this.addExpr(stmt.expr)
-                   .addInstr(["(local.set $___IMPL_RET)"]);
+        if (stmt.expr.type_ == "none") {
+          return this.addExpr(stmt.expr);
+        } else {
+          return this.addExpr(stmt.expr)
+                     .addInstr(["(local.set $___IMPL_RET)"]);
+        }
       case "if": {
         const tmp = this.addExpr(stmt.pred)
                         .addInstr(["(if", "(then"])  // typechecker disallows empty body1
@@ -377,12 +349,12 @@ function indent(code: string[]): string[] {
 
 export function compile(source: string): string {
   const ast = parseProgram(source);
-  typeCheckProgram(ast);
+  const typedAST = buildTypedAST(ast);
 
   // number of define statements
-  const n = countDefDeclStmts(ast);
-  const defStmts = ast.slice(0, n);
-  const rest = ast.slice(n);
+  const n = countDefDeclStmts(typedAST);
+  const defStmts = typedAST.slice(0, n);
+  const rest = typedAST.slice(n);
 
   const iout = defStmts
     .filter(s => s.tag == "assign")
@@ -395,19 +367,21 @@ export function compile(source: string): string {
     .addStmts(rest);
 
   let progBody = iout.decl.concat(iout.body);
-  if (!iout.printLast) {
+  if (!iout.implReturn) {
     progBody[progBody.length - 1] += "))";
   }
-  const out = (iout.printLast) ? "(result i32)" : "";
+  const out = (iout.implReturn) ? "(result i32)" : "";
 
   const code = ["(module"].concat(
-    [`(func $print (import "imports" "print") (param i32) (result i32))`],
+    [`(func $printI32 (import "imports" "printI32") (param i32))`],
+    [`(func $printBool (import "imports" "printBool") (param i32))`],
+    [`(func $printNone (import "imports" "printNone"))`],
     [`(func $pow (import "imports" "pow") (param i32) (param i32) (result i32))`],
     iout.defs,
     [`(func (export "_start") ${out}`],
     ["(local $___IMPL_RET i32)"],
     progBody,
-    (iout.printLast) ? ["(local.get $___IMPL_RET)))"] : [""]
+    (iout.implReturn) ? ["(local.get $___IMPL_RET)))"] : [""]
   );
 
   return indent(code).join("\n");

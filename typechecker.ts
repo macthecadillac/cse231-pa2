@@ -15,14 +15,14 @@ import {
 
 // FIXME: the rhs of variable declaration can only be literals
 
-export function typeCheckProgram(prog: Stmt[]) {
+export function buildTypedAST(prog: Stmt[]): Stmt[] {
   let builtin = new Map;
-  builtin.set("print", { parameterTypes: ["int"], outputType: "none" });
+  builtin.set("print", { parameterTypes: ["polymorphic"], outputType: "none" });
   builtin.set("abs", { parameterTypes: ["int"], outputType: "int" });
   builtin.set("max", { parameterTypes: ["int", "int"], outputType: "int" });
   builtin.set("min", { parameterTypes: ["int", "int"], outputType: "int" });
   builtin.set("pow", { parameterTypes: ["int", "int"], outputType: "int" });
-  typeCheck(prog, new Map, builtin, "none")
+  return fillInStmtsTypeInfo(prog, new Map, builtin, "none");
 }
 
 type FuncType = { parameterTypes: Type[], outputType: Type }
@@ -30,10 +30,10 @@ type FuncType = { parameterTypes: Type[], outputType: Type }
 // A failure in the typechecking process leads to an unrecoverable failure so we
 // might as well throw an error and exit. A pass at this stage however does not
 // warrant any action.
-export function typeCheck(stmts: Stmt[],
-                          outerVarScope: Map<string, Type>,
-                          outerFuncScope: Map<string, FuncType>,
-                          retType: Type) {
+export function fillInStmtsTypeInfo(stmts: Stmt[],
+                                    outerVarScope: Map<string, Type>,
+                                    outerFuncScope: Map<string, FuncType>,
+                                    retType: Type): Stmt[] {
   // All the function definitions and variable declarations must be at the top
   // of the scope. The order of defs or decls doesn't matter--they can even be
   // interweaved, as long as no computation happens before then end of this
@@ -88,58 +88,81 @@ export function typeCheck(stmts: Stmt[],
     }, outerFuncScope);
 
   // Typecheck each statement
-  for (const stmt of stmts) {
-    if (stmt.tag == "assign") {
-      const rhsType = inferExprType(stmt.value, varScope, funcScope);
-      const lhsType = varScope.get(stmt.name);
-      if (rhsType != lhsType) {
-        throw new GeneralTypeError(lhsType, rhsType);
-      }
-    } else if (stmt.tag == "expr") {
-      checkExprType(stmt.expr, varScope, funcScope);
-    } else if (stmt.tag == "define") {
-      // ChocoPy functions don't capture variables. Reset scope to be the
-      // supplied parameters.
-      const varScope = stmt.parameters.reduce((map, p) => {
-        map.set(p.name, p.type_);
-        return map
-      }, new Map);
-
-      // check statements in the body, including matching return types to the
-      // stated output type
-      try {
-        typeCheck(stmt.body, varScope, funcScope, stmt.outputType);
-      }
-      catch(err) {
-        if (err instanceof NotAVariable) {
-          if (varScope.has(err.varName)) {
-            throw new NotDeclaredInScope(err.varName);
-          }
+  const addTypes = (stmt: Stmt) => {
+    switch (stmt.tag) {
+      case "assign": {
+        const rhsType = inferExprType(stmt.value, varScope, funcScope);
+        const lhsType = varScope.get(stmt.name);
+        if (rhsType != lhsType) {
+          throw new GeneralTypeError(lhsType, rhsType);
         }
-        throw err;
+        return { ...stmt, value: fillInExprTypeInfo(stmt.value, varScope, funcScope) };
       }
+      case "expr": {
+        return { ...stmt, expr: fillInExprTypeInfo(stmt.expr, varScope, funcScope) };
+      }
+      case "define": {
+        // ChocoPy functions don't capture variables. Reset scope to be the
+        // supplied parameters.
+        const varScope = stmt.parameters
+          .concat(declBlock as varType[])
+          .reduce((map, p) => {
+            map.set(p.name, p.type_);
+            return map
+          }, new Map);
 
-      checkReturnType(stmt.name, stmt.body, varScope, funcScope, stmt.outputType);
-    } else if (stmt.tag == "return") {
-      const t = inferExprType(stmt.value, varScope, funcScope);
-      if (retType != t) {
-        throw new GeneralTypeError(retType, t);
+        // check statements in the body, including matching return types to the
+        // stated output type
+        try {
+          fillInStmtsTypeInfo(stmt.body, varScope, funcScope, stmt.outputType);
+        }
+        catch(err) {
+          if (err instanceof NotAVariable) {
+            if (varScope.has(err.varName)) {
+              throw new NotDeclaredInScope(err.varName);
+            }
+          }
+          throw err;
+        }
+
+        checkReturnType(stmt.name, stmt.body, varScope, funcScope, stmt.outputType);
+
+        const body = fillInStmtsTypeInfo(stmt.body, varScope, funcScope, stmt.outputType);
+        return { ...stmt, body };
       }
-    } else if (stmt.tag == "if") {
-      const t = inferExprType(stmt.pred, varScope, funcScope);
-      if (t != "bool") {
-        throw new ConditionalExprTypeError(t);
+      case "return": {
+        const t = inferExprType(stmt.value, varScope, funcScope);
+        if (retType != t) {
+          throw new GeneralTypeError(retType, t);
+        }
+        return { ...stmt, value: fillInExprTypeInfo(stmt.value, varScope, funcScope) };
       }
-      typeCheck(stmt.body1, varScope, funcScope, retType);
-      typeCheck(stmt.body2, varScope, funcScope, retType);
-    } else if (stmt.tag == "while") {
-      const t = inferExprType(stmt.pred, varScope, funcScope);
-      if (t != "bool") {
-        throw new ConditionalExprTypeError(t);
+      case "if": {
+        const t = inferExprType(stmt.pred, varScope, funcScope);
+        if (t != "bool") {
+          throw new ConditionalExprTypeError(t);
+        }
+        const pred = fillInExprTypeInfo(stmt.pred, varScope, funcScope);
+        const body1 = fillInStmtsTypeInfo(stmt.body1, varScope, funcScope, retType);
+        const body2 = fillInStmtsTypeInfo(stmt.body2, varScope, funcScope, retType);
+        return { ...stmt, pred, body1, body2 };
       }
-      typeCheck(stmt.body, varScope, funcScope, retType);
-    }
-  };
+      case "while": {
+        const t = inferExprType(stmt.pred, varScope, funcScope);
+        if (t != "bool") {
+          throw new ConditionalExprTypeError(t);
+        }
+        const pred = fillInExprTypeInfo(stmt.pred, varScope, funcScope);
+        const body = fillInStmtsTypeInfo(stmt.body, varScope, funcScope, retType);
+        return { ...stmt, pred, body };
+      }
+      case "pass": {
+        return stmt
+      }
+    };
+  }
+
+  return stmts.map(addTypes);
 }
 
 export function checkReturnType(name: string,
@@ -191,11 +214,35 @@ export function checkReturnType(name: string,
   }
 }
 
-function checkExprType(expr: Expr,
-                       varScope: Map<string, Type>,
-                       funcScope: Map<string, FuncType>) {
+function fillInExprTypeInfo(expr: Expr,
+                            varScope: Map<string, Type>,
+                            funcScope: Map<string, FuncType>): Expr {
   // leverage the type chekcing code in the inference algorithm
-  inferExprType(expr, varScope, funcScope);
+  switch (expr.tag) {
+    case "call": {
+      const args = expr.arguments.map(e => fillInExprTypeInfo(e, varScope, funcScope));
+      const type_ = inferExprType(expr, varScope, funcScope);
+      return { ...expr, arguments: args, type_ };
+    }
+    case "uniop": {
+      const arg = fillInExprTypeInfo(expr.arg, varScope, funcScope);
+      const type_ = inferExprType(expr, varScope, funcScope);
+      return { ...expr, arg, type_ };
+    }
+    case "binop": {
+      const arg1 = fillInExprTypeInfo(expr.arg1, varScope, funcScope);
+      const arg2 = fillInExprTypeInfo(expr.arg2, varScope, funcScope);
+      const type_ = inferExprType(expr, varScope, funcScope);
+      return { ...expr, arg1, arg2, type_ };
+    }
+    case "parens": {
+      const e = fillInExprTypeInfo(expr.expr, varScope, funcScope);
+      const type_ = inferExprType(expr, varScope, funcScope);
+      return { ...expr, expr: e, type_ };
+    }
+    default:
+      return { ...expr, type_: inferExprType(expr, varScope, funcScope) };
+  }
 }
 
 export function inferExprType(expr: Expr,
@@ -217,7 +264,7 @@ export function inferExprType(expr: Expr,
           const paramN = tuple[0];
           const t1 = tuple[1];
           const t2 = inferExprType(tuple[2], varScope, funcScope);
-          if (t1 != t2) {
+          if (t1 != t2 && t1 != "polymorphic") {
             throw new FuncCallTypError(t1, t2, paramN);
           }
         }

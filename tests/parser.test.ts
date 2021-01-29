@@ -19,7 +19,8 @@ describe('traverseExpr(s, c) function', () => {
       value: {
         tag: "number",
         value: 987
-      }
+      },
+      type_: "int"
     });
   })
 
@@ -37,8 +38,10 @@ describe('traverseExpr(s, c) function', () => {
         value: {
           tag: "number",
           value: 1
-        }
-      }]
+        },
+        type_: "int"
+      }],
+      type_: ""
     });
   })
 });
@@ -58,7 +61,8 @@ describe('traverseStmt(s, c) function', () => {
         value: {
           tag: "number",
           value: 2
-        }
+        },
+        type_: "int"
       }
     });
   })
@@ -77,7 +81,8 @@ describe('traverseStmt(s, c) function', () => {
         value: {
           tag: "number",
           value: 2
-        }
+        },
+        type_: "int"
       }
     });
   })
@@ -106,8 +111,9 @@ describe('traverseStmt(s, c) function', () => {
       pred: {
         tag: "binop",
         binop: "==",
-        arg1: { tag: "id", name: "x" },
-        arg2: { tag: "literal", value: { tag: "number", value: 1 } }
+        arg1: { tag: "id", name: "x", type_: "" },
+        arg2: { tag: "literal", type_: "int", value: { tag: "number", value: 1 } },
+        type_: ""
       },
       body1: [{
         tag: "return",
@@ -116,7 +122,8 @@ describe('traverseStmt(s, c) function', () => {
           value: {
             tag: "number",
             value: 1
-          }
+          },
+          type_: "int"
         }
       }],
       body2: [{ tag: "pass" }]
@@ -134,7 +141,8 @@ describe('parseProgram(source) function', () => {
         value: {
           tag: "number",
           value: 987
-        }
+        },
+        type_: "int"
       }
     }]);
   });  

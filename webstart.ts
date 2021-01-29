@@ -1,4 +1,5 @@
-import {compile, run} from './compiler';
+import { compile } from './compiler';
+import { run } from './runner';
 
 document.addEventListener("DOMContentLoaded", async () => {
   const runButton = document.getElementById("run");
